@@ -14,6 +14,9 @@ import pytest
 
 from a2ia.workspace import Workspace, WorkspaceSecurityError
 
+# Mark all tests in this file as unit tests
+pytestmark = pytest.mark.unit
+
 
 class TestWorkspaceCreation:
     """Test workspace initialization."""
