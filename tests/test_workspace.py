@@ -7,9 +7,6 @@ Security requirements:
 - Absolute paths outside workspace are rejected
 """
 
-import os
-import tempfile
-from pathlib import Path
 import pytest
 
 from a2ia.workspace import Workspace, WorkspaceSecurityError

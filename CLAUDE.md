@@ -1,19 +1,67 @@
 # A2IA - Aaron's AI Assistant
 
-A dual-purpose server that provides both MCP (Model Context Protocol) tools for Claude and OpenAPI endpoints for ChatGPT Actions. Designed to give AI assistants secure, sandboxed access to filesystem operations, shell execution, and persistent memory.
+A dual-purpose server that provides both MCP (Model Context Protocol) tools for Claude and OpenAPI endpoints for ChatGPT Actions. Designed to give AI assistants secure access to a persistent workspace with filesystem operations, shell execution, Git version control, and semantic memory.
 
 ## Overview
 
 A2IA enables AI assistants to:
-- Create and manage isolated workspaces for development sessions
+- Work in a **single persistent workspace** with automatic Git version control
 - Perform secure filesystem operations (read, write, edit, list, traverse)
-- Execute shell commands within the workspace sandbox
+- Execute shell commands within the workspace
+- Use Git for version control (commit, diff, reset, log, etc.)
 - Store and retrieve knowledge using a vector-based memory system
-- Maintain state across sessions with workspace persistence
+- Everything persists across sessions - no setup required!
 
 The server exposes tools through two interfaces:
 1. **MCP Protocol** - For Claude Code and other MCP-compatible clients
 2. **OpenAPI/REST** - For ChatGPT Actions and HTTP-based integrations
+
+## Key Features
+
+✅ **Zero Configuration** - Workspace auto-initializes on first use
+✅ **Git Integration** - Automatic version control with 11 git tools
+✅ **Persistent Storage** - All files survive server restarts
+✅ **Semantic Memory** - ChromaDB vector storage for knowledge
+✅ **Secure Sandbox** - Path validation prevents directory escape
+✅ **26 Total Tools** - Everything you need in one place
+
+## Quick Start
+
+```bash
+# Install dependencies
+pip install -e ".[dev]"
+
+# Start HTTP server (for ChatGPT Actions)
+python -m a2ia.server --mode http --port 8000
+
+# OR start MCP server (for Claude Desktop)
+python -m a2ia.server --mode mcp
+
+# Workspace auto-initializes at ./workspace with Git enabled!
+```
+
+### Typical Workflow
+
+```python
+# 1. Write code (no workspace creation needed!)
+write_file("main.py", "print('Hello World')")
+
+# 2. Run it
+execute_command("python main.py")
+
+# 3. Commit your progress
+git_add(".")
+git_commit("Add main.py")
+
+# 4. View history
+git_log(limit=5)
+
+# 5. Store knowledge
+store_memory("This project uses Python 3.13", tags=["project-info"])
+
+# 6. Rollback if needed
+git_reset("HEAD~1", hard=True)
+```
 
 ## Architecture
 
@@ -39,37 +87,52 @@ The server exposes tools through two interfaces:
 
 ### Core Components
 
-1. **Workspace Manager**
-   - Creates isolated workspace directories
-   - Validates all paths to prevent directory traversal
-   - Prevents symlink escape attacks
-   - Supports both ephemeral and persistent workspaces
+1. **Persistent Workspace**
+   - Single workspace at `./workspace` (configurable via `A2IA_WORKSPACE_PATH`)
+   - Auto-initialized on server startup
+   - Automatic Git repository initialization
+   - All operations scoped to workspace directory
+   - Path validation prevents directory escape
 
-2. **Filesystem Tools**
-   - `create_workspace` - Initialize or attach to workspace
+2. **Filesystem Tools** (6 tools)
    - `list_directory` - List contents (with optional recursion)
    - `read_file` - Read file contents
    - `write_file` - Create/overwrite files
-   - `edit_file` - Surgical edits using line-based replacements
+   - `edit_file` - Surgical edits using search & replace
    - `delete_file` - Remove files/directories
    - `move_file` - Rename/move files
 
-3. **Shell Execution**
+3. **Git Version Control** (11 tools) 🆕
+   - `git_status` - Show workspace status
+   - `git_diff` - View changes
+   - `git_add` - Stage files
+   - `git_commit` - Commit changes
+   - `git_log` - View history
+   - `git_reset` - Rollback to previous state
+   - `git_restore` - Discard changes to file
+   - `git_show` - Show commit details
+   - `git_branch` - List branches
+   - `git_checkout` - Switch branches/commits
+
+4. **Shell Execution** (1 tool)
    - `execute_command` - Run shell commands in workspace
    - Captures stdout/stderr
    - Timeout support
-   - Environment variable isolation
+   - Environment variable support
 
-4. **Memory System**
+5. **Memory System** (5 tools)
    - `store_memory` - Save knowledge with embeddings
    - `recall_memory` - Semantic search over memories
    - `list_memories` - Browse stored knowledge
+   - `delete_memory` - Remove specific memory
+   - `clear_all_memories` - Clear all memories
    - Uses ChromaDB for vector storage
-   - Automatic embedding generation
+   - Stored in `workspace/memory/`
 
-5. **Meta Tools**
-   - `get_openapi_spec` - Generate OpenAPI specification
-   - `health_check` - Server status
+6. **Workspace Info** (3 tools - backward compatible)
+   - `create_workspace` - Returns info about persistent workspace
+   - `get_workspace_info` - Get workspace details
+   - `close_workspace` - No-op (workspace is always active)
 
 ## Security Model
 

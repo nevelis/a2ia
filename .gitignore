@@ -74,7 +74,7 @@ chroma_data/
 *.db
 
 # Workspaces (A2IA specific)
-workspaces/
+workspace/
 *.a2ia_workspace.json
 
 # Reference directory (don't commit)

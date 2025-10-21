@@ -10,14 +10,14 @@ import json
 import os
 import shutil
 import uuid
-from dataclasses import dataclass, asdict
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional
 
 
 class WorkspaceSecurityError(Exception):
     """Raised when a path operation violates workspace security."""
+
     pass
 
 
@@ -27,22 +27,22 @@ class Workspace:
 
     workspace_id: str
     path: Path
-    description: Optional[str] = None
-    created_at: Optional[str] = None
+    description: str | None = None
+    created_at: str | None = None
 
     def __post_init__(self):
         """Ensure path is absolute and resolved."""
         self.path = self.path.resolve()
 
         if self.created_at is None:
-            self.created_at = datetime.now(timezone.utc).isoformat()
+            self.created_at = datetime.now(UTC).isoformat()
 
     @classmethod
     def create(
         cls,
         workspace_root: Path,
-        workspace_id: Optional[str] = None,
-        description: Optional[str] = None
+        workspace_id: str | None = None,
+        description: str | None = None,
     ) -> "Workspace":
         """Create a new workspace directory.
 
@@ -61,20 +61,14 @@ class Workspace:
         workspace_path.mkdir(parents=True, exist_ok=True)
 
         ws = cls(
-            workspace_id=workspace_id,
-            path=workspace_path,
-            description=description
+            workspace_id=workspace_id, path=workspace_path, description=description
         )
         ws.save_metadata()
 
         return ws
 
     @classmethod
-    def attach(
-        cls,
-        path: Path,
-        description: Optional[str] = None
-    ) -> "Workspace":
+    def attach(cls, path: Path, description: str | None = None) -> "Workspace":
         """Attach to an existing directory as workspace.
 
         Args:
@@ -100,15 +94,11 @@ class Workspace:
                 workspace_id=metadata.get("workspace_id", path.name),
                 path=path,
                 description=metadata.get("description", description),
-                created_at=metadata.get("created_at")
+                created_at=metadata.get("created_at"),
             )
 
         # Create new workspace from existing directory
-        ws = cls(
-            workspace_id=path.name,
-            path=path,
-            description=description
-        )
+        ws = cls(workspace_id=path.name, path=path, description=description)
         ws.save_metadata()
 
         return ws
@@ -162,15 +152,15 @@ class Workspace:
         try:
             resolved = target.resolve(strict=False)
         except (OSError, RuntimeError) as e:
-            raise WorkspaceSecurityError(f"Cannot resolve path {path}: {e}")
+            raise WorkspaceSecurityError(f"Cannot resolve path {path}: {e}") from e
 
         # Verify the resolved path is within workspace
         try:
             resolved.relative_to(self.path)
-        except ValueError:
+        except ValueError as e:
             raise WorkspaceSecurityError(
                 f"Path {path} resolves to {resolved}, which is outside workspace {self.path}"
-            )
+            ) from e
 
         return resolved
 
@@ -223,7 +213,7 @@ class Workspace:
         return {
             "success": True,
             "path": str(resolved.relative_to(self.path)),
-            "size": resolved.stat().st_size
+            "size": resolved.stat().st_size,
         }
 
     def list_directory(self, path: str = "", recursive: bool = False) -> dict:
@@ -292,7 +282,7 @@ class Workspace:
         return {
             "files": sorted(files),
             "directories": sorted(directories),
-            "path": str(resolved)
+            "path": str(resolved),
         }
 
     def delete_file(self, path: str, recursive: bool = False) -> dict:
@@ -321,10 +311,7 @@ class Workspace:
         else:
             resolved.unlink()
 
-        return {
-            "success": True,
-            "path": str(Path(path))
-        }
+        return {"success": True, "path": str(Path(path))}
 
     def move_file(self, source: str, destination: str) -> dict:
         """Move or rename a file/directory.
@@ -352,18 +339,10 @@ class Workspace:
         # Move/rename
         shutil.move(str(src_resolved), str(dst_resolved))
 
-        return {
-            "success": True,
-            "source": source,
-            "destination": destination
-        }
+        return {"success": True, "source": source, "destination": destination}
 
     def edit_file(
-        self,
-        path: str,
-        old_text: str,
-        new_text: str,
-        occurrence: Optional[int] = None
+        self, path: str, old_text: str, new_text: str, occurrence: int | None = None
     ) -> dict:
         """Edit a file by replacing text.
 
@@ -399,26 +378,28 @@ class Workspace:
             # Replace specific occurrence
             parts = content.split(old_text)
             if occurrence < 1 or occurrence > len(parts) - 1:
-                raise ValueError(f"Occurrence {occurrence} out of range (1-{len(parts) - 1})")
+                raise ValueError(
+                    f"Occurrence {occurrence} out of range (1-{len(parts) - 1})"
+                )
 
             # Rebuild with replacement at specific position
-            new_content = old_text.join(parts[:occurrence]) + new_text + old_text.join(parts[occurrence:])
+            new_content = (
+                old_text.join(parts[:occurrence])
+                + new_text
+                + old_text.join(parts[occurrence:])
+            )
             changes = 1
 
         resolved.write_text(new_content)
 
-        return {
-            "success": True,
-            "path": str(Path(path)),
-            "changes": changes
-        }
+        return {"success": True, "path": str(Path(path)), "changes": changes}
 
     def save_metadata(self):
         """Save workspace metadata to .a2ia_workspace.json."""
         metadata = {
             "workspace_id": self.workspace_id,
             "description": self.description,
-            "created_at": self.created_at
+            "created_at": self.created_at,
         }
 
         metadata_file = self.path / ".a2ia_workspace.json"
@@ -430,5 +411,5 @@ class Workspace:
             "workspace_id": self.workspace_id,
             "path": str(self.path),
             "description": self.description,
-            "created_at": self.created_at
+            "created_at": self.created_at,
         }

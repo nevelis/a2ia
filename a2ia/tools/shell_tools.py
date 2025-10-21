@@ -1,8 +1,7 @@
 """Shell command execution tools."""
 
 import asyncio
-import subprocess
-from typing import Optional, Dict
+
 from ..core import get_mcp_app, get_workspace
 
 mcp = get_mcp_app()
@@ -12,8 +11,8 @@ mcp = get_mcp_app()
 async def execute_command(
     command: str,
     timeout: int = 30,
-    cwd: Optional[str] = None,
-    env: Optional[Dict[str, str]] = None
+    cwd: str | None = None,
+    env: dict[str, str] | None = None,
 ) -> dict:
     """Execute a shell command in the workspace.
 
@@ -38,11 +37,13 @@ async def execute_command(
     command_env = None
     if env:
         import os
+
         command_env = os.environ.copy()
         command_env.update(env)
 
     # Execute command
     import time
+
     start_time = time.time()
 
     try:
@@ -51,31 +52,30 @@ async def execute_command(
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=str(work_dir),
-            env=command_env
+            env=command_env,
         )
 
         stdout_bytes, stderr_bytes = await asyncio.wait_for(
-            process.communicate(),
-            timeout=timeout
+            process.communicate(), timeout=timeout
         )
 
         duration = time.time() - start_time
 
         return {
-            "stdout": stdout_bytes.decode('utf-8', errors='replace'),
-            "stderr": stderr_bytes.decode('utf-8', errors='replace'),
+            "stdout": stdout_bytes.decode("utf-8", errors="replace"),
+            "stderr": stderr_bytes.decode("utf-8", errors="replace"),
             "returncode": process.returncode,
-            "duration": round(duration, 2)
+            "duration": round(duration, 2),
         }
 
-    except asyncio.TimeoutError:
+    except TimeoutError:
         duration = time.time() - start_time
         return {
             "stdout": "",
             "stderr": f"Command timed out after {timeout} seconds",
             "returncode": -1,
             "duration": round(duration, 2),
-            "error": "timeout"
+            "error": "timeout",
         }
     except Exception as e:
         duration = time.time() - start_time
@@ -84,5 +84,5 @@ async def execute_command(
             "stderr": str(e),
             "returncode": -1,
             "duration": round(duration, 2),
-            "error": "execution_failed"
+            "error": "execution_failed",
         }

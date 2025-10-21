@@ -1,6 +1,5 @@
 """Filesystem operation tools."""
 
-from typing import Optional
 from ..core import get_mcp_app, get_workspace
 
 mcp = get_mcp_app()
@@ -35,11 +34,7 @@ async def read_file(path: str, encoding: str = "utf-8") -> dict:
     ws = get_workspace()
     content = ws.read_file(path, encoding)
 
-    return {
-        "content": content,
-        "path": path,
-        "size": len(content.encode(encoding))
-    }
+    return {"content": content, "path": path, "size": len(content.encode(encoding))}
 
 
 @mcp.tool()
@@ -62,10 +57,7 @@ async def write_file(path: str, content: str, encoding: str = "utf-8") -> dict:
 
 @mcp.tool()
 async def edit_file(
-    path: str,
-    old_text: str,
-    new_text: str,
-    occurrence: Optional[int] = None
+    path: str, old_text: str, new_text: str, occurrence: int | None = None
 ) -> dict:
     """Edit a file by replacing text.
 

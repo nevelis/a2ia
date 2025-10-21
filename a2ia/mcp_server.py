@@ -4,10 +4,10 @@ Runs the MCP server via stdio for local Claude desktop integration.
 """
 
 import asyncio
+
 from .core import get_mcp_app
 
 # Import all tools to register them
-from .tools import workspace_tools, filesystem_tools, shell_tools
 
 
 async def main():
@@ -18,11 +18,7 @@ async def main():
     from mcp.server.stdio import stdio_server
 
     async with stdio_server() as (read_stream, write_stream):
-        await mcp.run(
-            read_stream,
-            write_stream,
-            mcp.create_initialization_options()
-        )
+        await mcp.run(read_stream, write_stream, mcp.create_initialization_options())
 
 
 def run():
