@@ -65,9 +65,11 @@ class TestRESTFiles:
 
     async def test_put_and_get_file(self, client, auth_headers, temp_workspace):
         """PUT to create file, GET to read it."""
-        # Write file
+        # Write file (JSON format with content field)
         write_response = await client.put(
-            "/workspace/files/test.txt", headers=auth_headers, content=b"Hello REST!"
+            "/workspace/files/test.txt",
+            headers=auth_headers,
+            json={"content": "Hello REST!"}
         )
         if write_response.status_code != 200:
             print(f"Error: {write_response.status_code}")
@@ -84,11 +86,11 @@ class TestRESTFiles:
 
     async def test_patch_file_with_diff(self, client, auth_headers, temp_workspace):
         """PATCH to apply unified diff."""
-        # Create initial file
+        # Create initial file (JSON format)
         await client.put(
             "/workspace/files/code.py",
             headers=auth_headers,
-            content=b"line 1\nline 2\nline 3\n",
+            json={"content": "line 1\nline 2\nline 3\n"}
         )
 
         # Apply patch
@@ -122,9 +124,11 @@ class TestRESTFiles:
 
     async def test_delete_file(self, client, auth_headers, temp_workspace):
         """DELETE to remove file."""
-        # Create file
+        # Create file (JSON format)
         await client.put(
-            "/workspace/files/delete_me.txt", headers=auth_headers, content=b"temporary"
+            "/workspace/files/delete_me.txt",
+            headers=auth_headers,
+            json={"content": "temporary"}
         )
 
         # Delete it
@@ -141,12 +145,16 @@ class TestRESTFiles:
 
     async def test_list_directory(self, client, auth_headers, temp_workspace):
         """GET with ?list=true to list directory."""
-        # Create files
+        # Create files (JSON format)
         await client.put(
-            "/workspace/files/file1.txt", headers=auth_headers, content=b"1"
+            "/workspace/files/file1.txt",
+            headers=auth_headers,
+            json={"content": "1"}
         )
         await client.put(
-            "/workspace/files/file2.txt", headers=auth_headers, content=b"2"
+            "/workspace/files/file2.txt",
+            headers=auth_headers,
+            json={"content": "2"}
         )
 
         # List directory
@@ -160,9 +168,11 @@ class TestRESTFiles:
 
     async def test_move_file(self, client, auth_headers, temp_workspace):
         """POST /files/{path}/move to rename."""
-        # Create file
+        # Create file (JSON format)
         await client.put(
-            "/workspace/files/old.txt", headers=auth_headers, content=b"data"
+            "/workspace/files/old.txt",
+            headers=auth_headers,
+            json={"content": "data"}
         )
 
         # Move it
@@ -212,9 +222,11 @@ class TestRESTGit:
 
     async def test_git_workflow(self, client, auth_headers, temp_workspace):
         """Test complete git workflow."""
-        # Create file
+        # Create file (JSON format)
         await client.put(
-            "/workspace/files/main.py", headers=auth_headers, content=b"print('hello')"
+            "/workspace/files/main.py",
+            headers=auth_headers,
+            json={"content": "print('hello')"}
         )
 
         # Stage

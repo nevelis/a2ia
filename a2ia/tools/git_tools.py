@@ -211,3 +211,18 @@ async def git_checkout(branch_or_commit: str, create_new: bool = False) -> dict:
 
     result = _run_git_command(command)
     return result
+
+
+@mcp.tool()
+async def git_blame(path: str) -> dict:
+    """Show git blame for a file (who changed each line).
+
+    Args:
+        path: File path relative to workspace
+
+    Returns:
+        Dictionary with blame output
+    """
+    result = _run_git_command(["blame", path])
+    return result
+

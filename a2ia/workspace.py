@@ -144,8 +144,15 @@ class Workspace:
         # Convert to Path object
         target = Path(path)
 
-        # If relative, make it relative to workspace
-        if not target.is_absolute():
+        # If absolute path, treat it as relative to workspace root
+        # E.g., "/home/user/workspace/file.txt" -> "file.txt"
+        # E.g., "/etc/passwd" -> "etc/passwd" (sandboxed to workspace)
+        if target.is_absolute():
+            # Strip leading slash and treat as relative
+            path_str = str(target).lstrip('/')
+            target = self.path / path_str
+        else:
+            # Make relative path relative to workspace
             target = self.path / target
 
         # Resolve symlinks and normalize path

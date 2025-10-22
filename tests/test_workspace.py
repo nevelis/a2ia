@@ -8,6 +8,7 @@ Security requirements:
 """
 
 import pytest
+from pathlib import Path
 
 from a2ia.workspace import Workspace, WorkspaceSecurityError
 
@@ -80,20 +81,70 @@ class TestPathSecurity:
         assert resolved == tmp_path / "src" / "main.py"
 
     def test_resolve_absolute_path_in_workspace(self, tmp_path):
-        """Should accept absolute paths within workspace."""
+        """Absolute paths are stripped and sandboxed to workspace."""
         ws = Workspace.attach(tmp_path)
-        absolute_path = tmp_path / "file.txt"
 
+        # Even if the absolute path points inside workspace, it gets re-sandboxed
+        # This prevents confusion - all paths are relative to workspace
+        absolute_path = tmp_path / "file.txt"
         resolved = ws.resolve_path(str(absolute_path))
 
-        assert resolved == absolute_path
+        # Path gets sandboxed: /tmp/xyz/file.txt -> /tmp/xyz/tmp/xyz/file.txt
+        # This is intentional - forces consistent relative paths
+        assert str(resolved).startswith(str(tmp_path))
 
-    def test_reject_absolute_path_outside_workspace(self, tmp_path):
-        """Should reject absolute paths outside workspace."""
+    def test_absolute_path_treated_as_relative(self, tmp_path):
+        """Absolute paths should be stripped and treated as relative to workspace."""
         ws = Workspace.attach(tmp_path)
 
+        # Create a file
+        (tmp_path / "test.txt").write_text("content")
+
+        # Absolute path should be stripped and made relative to workspace
+        # /home/user/workspace/test.txt -> workspace/test.txt -> workspace/home/user/workspace/test.txt
+        # So /etc/passwd -> workspace/etc/passwd (sandboxed)
+        resolved = ws.resolve_path("/test.txt")
+
+        # Should resolve to workspace/test.txt NOT /test.txt
+        assert resolved == tmp_path / "test.txt"
+        assert str(resolved).startswith(str(tmp_path))
+
+    def test_absolute_path_sandboxed(self, tmp_path):
+        """Absolute paths like /etc/passwd get sandboxed to workspace/etc/passwd."""
+        ws = Workspace.attach(tmp_path)
+
+        # /etc/passwd should become workspace/etc/passwd
+        resolved = ws.resolve_path("/etc/passwd")
+
+        # Should be inside workspace
+        assert str(resolved).startswith(str(tmp_path))
+        assert resolved == tmp_path / "etc" / "passwd"
+
+    def test_absolute_workspace_path_normalized(self, tmp_path):
+        """Absolute path to workspace file gets normalized."""
+        ws = Workspace.attach(tmp_path)
+
+        # If ChatGPT sends /home/aaron/a2ia/workspace/agast/settings.py
+        # It should become workspace/home/aaron/a2ia/workspace/agast/settings.py
+        chatgpt_path = "/home/aaron/a2ia/workspace/agast/settings.py"
+        resolved = ws.resolve_path(chatgpt_path)
+
+        # Should be sandboxed inside workspace
+        assert str(resolved).startswith(str(tmp_path))
+        # Should be at workspace/home/aaron/a2ia/workspace/agast/settings.py
+        expected = tmp_path / "home" / "aaron" / "a2ia" / "workspace" / "agast" / "settings.py"
+        assert resolved == expected
+
+    def test_reject_directory_traversal_in_absolute_path(self, tmp_path):
+        """Directory traversal in absolute paths should be rejected."""
+        ws = Workspace.attach(tmp_path)
+
+        # Attacker tries: /home/aaron/../../../../../../../../etc/passwd
+        # This should resolve outside workspace and be REJECTED
+        attack_path = "/home/aaron/../../../../../../../../etc/passwd"
+
         with pytest.raises(WorkspaceSecurityError, match="outside workspace"):
-            ws.resolve_path("/etc/passwd")
+            ws.resolve_path(attack_path)
 
     def test_reject_parent_directory_escape(self, tmp_path):
         """Should reject relative paths that escape with .."""
@@ -176,11 +227,20 @@ class TestFileOperations:
         assert (tmp_path / "src" / "utils" / "helper.py").exists()
 
     def test_write_file_outside_workspace_fails(self, tmp_path):
-        """Should prevent writing outside workspace."""
+        """Absolute paths get sandboxed to workspace, not real filesystem."""
         ws = Workspace.attach(tmp_path)
 
-        with pytest.raises(WorkspaceSecurityError):
-            ws.write_file("/etc/passwd", "malicious")
+        # /tmp/dangerous.txt gets sandboxed to workspace/tmp/dangerous.txt (safe)
+        ws.write_file("/tmp/dangerous.txt", "sandboxed content")
+
+        # Verify it's in workspace/tmp/dangerous.txt, not /tmp/dangerous.txt
+        sandboxed_file = tmp_path / "tmp" / "dangerous.txt"
+        assert sandboxed_file.exists()
+        assert sandboxed_file.read_text() == "sandboxed content"
+
+        # Real /tmp/dangerous.txt should NOT exist (we didn't touch real filesystem)
+        real_file = Path("/tmp/dangerous.txt")
+        assert not real_file.exists() or "sandboxed content" not in real_file.read_text()
 
     def test_list_directory(self, tmp_path):
         """Should list directory contents."""

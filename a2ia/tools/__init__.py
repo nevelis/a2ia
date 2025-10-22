@@ -7,4 +7,5 @@ from . import (
     memory_tools,  # noqa: F401
     shell_tools,  # noqa: F401
     workspace_tools,  # noqa: F401
+    terraform_tools,  # noqa: F401
 )

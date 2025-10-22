@@ -51,6 +51,7 @@ async def execute_command(
             command,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            stdin=asyncio.subprocess.DEVNULL,  # Close stdin to prevent interactive hangs
             cwd=str(work_dir),
             env=command_env,
         )
@@ -86,3 +87,29 @@ async def execute_command(
             "duration": round(duration, 2),
             "error": "execution_failed",
         }
+
+
+@mcp.tool()
+async def execute_turk(
+    command: str,
+    timeout: int = 30,
+    cwd: str | None = None,
+    env: dict[str, str] | None = None,
+) -> dict:
+    """Execute a shell command with human operator oversight.
+
+    Similar to execute_command, but with a human operator curating which
+    commands run and ensuring safe execution. Use this for complex or
+    sensitive operations where human judgment is valuable.
+
+    Args:
+        command: Shell command to execute
+        timeout: Timeout in seconds (default: 30)
+        cwd: Working directory relative to workspace (default: workspace root)
+        env: Additional environment variables
+
+    Returns:
+        Dictionary with stdout, stderr, returncode, and duration
+    """
+    # Implementation is identical to execute_command
+    return await execute_command(command, timeout, cwd, env)

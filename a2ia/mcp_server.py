@@ -7,23 +7,16 @@ import asyncio
 
 from .core import get_mcp_app
 
-# Import all tools to register them
-
-
-async def main():
-    """Run the MCP server."""
-    mcp = get_mcp_app()
-
-    # Run stdio server (for Claude desktop)
-    from mcp.server.stdio import stdio_server
-
-    async with stdio_server() as (read_stream, write_stream):
-        await mcp.run(read_stream, write_stream, mcp.create_initialization_options())
+# Import all tools to register them with FastMCP
+from .tools import workspace_tools, filesystem_tools, shell_tools, memory_tools, git_tools  # noqa: F401
 
 
 def run():
     """Entry point for running the MCP server."""
-    asyncio.run(main())
+    mcp = get_mcp_app()
+
+    # Run stdio server (synchronous)
+    mcp.run(transport="stdio")
 
 
 if __name__ == "__main__":

@@ -25,6 +25,14 @@ app = FastAPI(
     openapi_url="/openapi.json",
 )
 
+# Add servers to OpenAPI schema
+app.servers = [
+    {
+        "url": "https://a2ia.amazingland.live",
+        "description": "Production server"
+    }
+]
+
 # Security
 security = HTTPBearer()
 
