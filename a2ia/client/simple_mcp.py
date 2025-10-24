@@ -56,7 +56,7 @@ class SimpleMCPClient:
         Accepts TitleCase names from LLM and maps to snake_case functions.
         """
         # Import all tool modules
-        from ..tools import filesystem_tools, git_tools, shell_tools, memory_tools, workspace_tools, terraform_tools
+        from ..tools import filesystem_tools, git_tools, git_sdlc_tools, shell_tools, memory_tools, workspace_tools, terraform_tools, ci_tools
 
         # Convert TitleCase to snake_case
         import re
@@ -89,9 +89,25 @@ class SimpleMCPClient:
             "git_restore": git_tools.git_restore,
             "git_blame": git_tools.git_blame,
             "git_checkout": git_tools.git_checkout,
+            # Git SDLC
+            "git_create_epoch_branch": git_sdlc_tools.git_create_epoch_branch,
+            "git_rebase_main": git_sdlc_tools.git_rebase_main,
+            "git_push_branch": git_sdlc_tools.git_push_branch,
+            "git_squash_epoch": git_sdlc_tools.git_squash_epoch,
+            "git_fast_forward_merge": git_sdlc_tools.git_fast_forward_merge,
+            "git_tag_epoch_final": git_sdlc_tools.git_tag_epoch_final,
+            "git_cherry_pick_phase": git_sdlc_tools.git_cherry_pick_phase,
+            "workspace_sync": git_sdlc_tools.workspace_sync,
             # Shell
             "execute_command": shell_tools.execute_command,
             "execute_turk": shell_tools.execute_turk,
+            "turk_info": shell_tools.turk_info,
+            "turk_reset": shell_tools.turk_reset,
+            # CI
+            "make": ci_tools.make,
+            "ruff": ci_tools.ruff,
+            "black": ci_tools.black,
+            "pytest_run": ci_tools.pytest_run,
             # Memory
             "store_memory": memory_tools.store_memory,
             "recall_memory": memory_tools.recall_memory,
@@ -154,10 +170,32 @@ class SimpleMCPClient:
             {"type": "function", "function": {"name": "GitCheckout", "description": "Switch branch or commit", "parameters": {"type": "object", "properties": {"branch_or_commit": {"type": "string"}, "create_new": {"type": "boolean"}}, "required": ["branch_or_commit"]}}},
         ])
 
+        # Git SDLC tools (TitleCase names)
+        tools.extend([
+            {"type": "function", "function": {"name": "GitCreateEpochBranch", "description": "Create epoch branch from main", "parameters": {"type": "object", "properties": {"number": {"type": "integer"}, "descriptor": {"type": "string"}}, "required": ["number", "descriptor"]}}},
+            {"type": "function", "function": {"name": "GitRebaseMain", "description": "Rebase onto main", "parameters": {"type": "object"}}},
+            {"type": "function", "function": {"name": "GitPushBranch", "description": "Push branch to remote", "parameters": {"type": "object", "properties": {"remote": {"type": "string"}, "force": {"type": "boolean"}}}}},
+            {"type": "function", "function": {"name": "GitSquashEpoch", "description": "Squash epoch commits", "parameters": {"type": "object", "properties": {"message": {"type": "string"}}, "required": ["message"]}}},
+            {"type": "function", "function": {"name": "GitFastForwardMerge", "description": "Fast-forward merge to main", "parameters": {"type": "object", "properties": {"branch": {"type": "string"}}}}},
+            {"type": "function", "function": {"name": "GitTagEpochFinal", "description": "Tag epoch as final", "parameters": {"type": "object", "properties": {"epoch_number": {"type": "integer"}, "message": {"type": "string"}}, "required": ["epoch_number"]}}},
+            {"type": "function", "function": {"name": "GitCherryPickPhase", "description": "Cherry-pick commit", "parameters": {"type": "object", "properties": {"commit_hash": {"type": "string"}}, "required": ["commit_hash"]}}},
+            {"type": "function", "function": {"name": "WorkspaceSync", "description": "Sync with remote", "parameters": {"type": "object", "properties": {"remote": {"type": "string"}}}}},
+        ])
+
         # Shell tools (TitleCase names)
         tools.extend([
             {"type": "function", "function": {"name": "ExecuteCommand", "description": "Execute shell command (non-interactive)", "parameters": {"type": "object", "properties": {"command": {"type": "string"}, "timeout": {"type": "integer"}, "cwd": {"type": "string"}}, "required": ["command"]}}},
             {"type": "function", "function": {"name": "ExecuteTurk", "description": "Execute shell command with human operator oversight for safe execution", "parameters": {"type": "object", "properties": {"command": {"type": "string"}, "timeout": {"type": "integer"}, "cwd": {"type": "string"}}, "required": ["command"]}}},
+            {"type": "function", "function": {"name": "TurkInfo", "description": "Get ExecuteTurk usage statistics", "parameters": {"type": "object"}}},
+            {"type": "function", "function": {"name": "TurkReset", "description": "Reset ExecuteTurk tracking", "parameters": {"type": "object"}}},
+        ])
+
+        # CI/Testing tools (TitleCase names)
+        tools.extend([
+            {"type": "function", "function": {"name": "Make", "description": "Run make targets", "parameters": {"type": "object", "properties": {"target": {"type": "string"}, "makefile": {"type": "string"}}}}},
+            {"type": "function", "function": {"name": "Ruff", "description": "Run Ruff linter/formatter", "parameters": {"type": "object", "properties": {"action": {"type": "string"}, "path": {"type": "string"}, "fix": {"type": "boolean"}}}}},
+            {"type": "function", "function": {"name": "Black", "description": "Run Black formatter", "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "check": {"type": "boolean"}}}}},
+            {"type": "function", "function": {"name": "PytestRun", "description": "Run pytest tests", "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "markers": {"type": "string"}, "verbose": {"type": "boolean"}, "coverage": {"type": "boolean"}}}}},
         ])
 
         # Memory tools (TitleCase names)

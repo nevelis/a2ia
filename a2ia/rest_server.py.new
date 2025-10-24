@@ -1,0 +1,112 @@
+# Git Meta-Operation - replaces all individual git endpoints
+
+class GitRequest(BaseModel):
+    """Git operation request with detailed subcommand support.
+
+    Available actions:
+    - status: Show git status
+    - diff: Show changes (params: path, staged)
+    - add: Stage files (params: path)
+    - commit: Commit changes (params: message)
+    - log: View history (params: limit)
+    - reset: Reset to commit (params: commit, hard)
+    - blame: Show who changed lines (params: path)
+    - checkout: Switch branch (params: branch_or_commit, create_new)
+    - create_epoch_branch: Create epoch/n-name branch (params: number, descriptor)
+    - rebase_main: Rebase onto main
+    - push_branch: Push to remote (params: remote, force)
+    - squash_epoch: Squash epoch commits (params: message)
+    - merge_ff: Fast-forward merge (params: branch)
+    - tag_epoch: Tag as epoch-n-final (params: epoch_number, message)
+    - cherry_pick: Cherry-pick commit (params: commit_hash)
+    - sync: Fetch and rebase from remote (params: remote)
+    """
+    action: str = Field(description="Git action to perform")
+    path: str | None = Field(None, description="File path for diff/blame")
+    staged: bool | None = Field(None, description="Show staged changes (diff)")
+    message: str | None = Field(None, description="Commit/tag/squash message")
+    limit: int | None = Field(None, description="Number of log entries")
+    commit: str | None = Field(None, description="Commit hash for reset")
+    hard: bool | None = Field(None, description="Hard reset (reset)")
+    branch_or_commit: str | None = Field(None, description="Branch/commit for checkout")
+    create_new: bool | None = Field(None, description="Create new branch (checkout)")
+    number: int | None = Field(None, description="Epoch number")
+    descriptor: str | None = Field(None, description="Branch descriptor")
+    remote: str | None = Field(None, description="Remote name (default: origin)")
+    force: bool | None = Field(None, description="Force operation")
+    branch: str | None = Field(None, description="Branch name")
+    epoch_number: int | None = Field(None, description="Epoch number for tagging")
+    commit_hash: str | None = Field(None, description="Commit to cherry-pick")
+
+
+@app.post("/git", tags=["Git"], operation_id="Git")
+async def git_operation(
+    git_req: GitRequest,
+    authenticated: bool = Depends(verify_token)
+):
+    """Execute Git operations with detailed subcommand support.
+
+    This meta-operation provides access to all Git functionality through a single endpoint.
+    Specify the action and relevant parameters for the operation you want to perform.
+    """
+    from .tools import git_tools, git_sdlc_tools
+
+    action = git_req.action
+
+    try:
+        # Route to appropriate tool based on action
+        if action == "status":
+            return await git_tools.git_status()
+        elif action == "diff":
+            return await git_tools.git_diff(git_req.path, git_req.staged or False)
+        elif action == "add":
+            if not git_req.path:
+                raise ValueError("path required for add")
+            return await git_tools.git_add(git_req.path)
+        elif action == "commit":
+            if not git_req.message:
+                raise ValueError("message required for commit")
+            return await git_tools.git_commit(git_req.message)
+        elif action == "log":
+            return await git_tools.git_log(git_req.limit or 10)
+        elif action == "reset":
+            return await git_tools.git_reset(git_req.commit or "HEAD", git_req.hard or False)
+        elif action == "blame":
+            if not git_req.path:
+                raise ValueError("path required for blame")
+            return await git_tools.git_blame(git_req.path)
+        elif action == "checkout":
+            if not git_req.branch_or_commit:
+                raise ValueError("branch_or_commit required for checkout")
+            return await git_tools.git_checkout(git_req.branch_or_commit, git_req.create_new or False)
+        elif action == "create_epoch_branch":
+            if not git_req.number or not git_req.descriptor:
+                raise ValueError("number and descriptor required for create_epoch_branch")
+            return await git_sdlc_tools.git_create_epoch_branch(git_req.number, git_req.descriptor)
+        elif action == "rebase_main":
+            return await git_sdlc_tools.git_rebase_main()
+        elif action == "push_branch":
+            return await git_sdlc_tools.git_push_branch(git_req.remote or "origin", git_req.force or False)
+        elif action == "squash_epoch":
+            if not git_req.message:
+                raise ValueError("message required for squash_epoch")
+            return await git_sdlc_tools.git_squash_epoch(git_req.message)
+        elif action == "merge_ff":
+            return await git_sdlc_tools.git_fast_forward_merge(git_req.branch)
+        elif action == "tag_epoch":
+            if not git_req.epoch_number:
+                raise ValueError("epoch_number required for tag_epoch")
+            return await git_sdlc_tools.git_tag_epoch_final(git_req.epoch_number, git_req.message)
+        elif action == "cherry_pick":
+            if not git_req.commit_hash:
+                raise ValueError("commit_hash required for cherry_pick")
+            return await git_sdlc_tools.git_cherry_pick_phase(git_req.commit_hash)
+        elif action == "sync":
+            return await git_sdlc_tools.workspace_sync(git_req.remote or "origin")
+        else:
+            raise ValueError(f"Unknown git action: {action}")
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e

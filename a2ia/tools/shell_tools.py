@@ -1,10 +1,14 @@
 """Shell command execution tools."""
 
 import asyncio
+from collections import Counter
 
 from ..core import get_mcp_app, get_workspace
 
 mcp = get_mcp_app()
+
+# Global tracker for ExecuteTurk command usage
+_turk_commands = Counter()
 
 
 @mcp.tool()
@@ -92,7 +96,7 @@ async def execute_command(
 @mcp.tool()
 async def execute_turk(
     command: str,
-    timeout: int = 30,
+    timeout: int = 300,  # 5 minutes default for manual commands
     cwd: str | None = None,
     env: dict[str, str] | None = None,
 ) -> dict:
@@ -101,6 +105,8 @@ async def execute_turk(
     Similar to execute_command, but with a human operator curating which
     commands run and ensuring safe execution. Use this for complex or
     sensitive operations where human judgment is valuable.
+
+    Tracks command usage for tooling gap analysis.
 
     Args:
         command: Shell command to execute
@@ -111,5 +117,55 @@ async def execute_turk(
     Returns:
         Dictionary with stdout, stderr, returncode, and duration
     """
-    # Implementation is identical to execute_command
+    # Track this command for tooling analysis
+    global _turk_commands
+    _turk_commands[command] += 1
+
+    # Execute the command
     return await execute_command(command, timeout, cwd, env)
+
+
+@mcp.tool()
+async def turk_info() -> dict:
+    """Get ExecuteTurk command usage statistics.
+
+    Shows which commands have been executed via ExecuteTurk and their frequency.
+    Used to identify tooling gaps that should be automated.
+
+    Returns:
+        Dictionary with command usage statistics
+    """
+    global _turk_commands
+
+    # Sort by frequency
+    sorted_commands = sorted(_turk_commands.items(), key=lambda x: x[1], reverse=True)
+
+    return {
+        "total_calls": sum(_turk_commands.values()),
+        "unique_commands": len(_turk_commands),
+        "commands": [
+            {"command": cmd, "count": count}
+            for cmd, count in sorted_commands
+        ],
+        "top_5": sorted_commands[:5] if sorted_commands else []
+    }
+
+
+@mcp.tool()
+async def turk_reset() -> dict:
+    """Reset ExecuteTurk command tracking.
+
+    Call this after reviewing turk_info and updating A2IA-Tooldev.md.
+
+    Returns:
+        Dictionary with reset confirmation
+    """
+    global _turk_commands
+    old_count = sum(_turk_commands.values())
+    _turk_commands.clear()
+
+    return {
+        "success": True,
+        "message": "ExecuteTurk tracking reset",
+        "previous_total": old_count
+    }

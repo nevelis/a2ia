@@ -577,105 +577,6 @@ async def execute_turk(
 
 
 # ============================================================================
-# Git Operations
-# ============================================================================
-
-
-def _run_git(command: list[str], timeout: int = 30) -> dict:
-    """Helper to run git commands."""
-    ws = get_workspace()
-
-    try:
-        result = subprocess.run(
-            ["git"] + command,
-            cwd=ws.path,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-
-        return {
-            "success": result.returncode == 0,
-            "returncode": result.returncode,
-            "stdout": result.stdout,
-            "stderr": result.stderr,
-        }
-
-    except subprocess.TimeoutExpired as e:
-        raise HTTPException(status_code=408, detail="Git command timed out") from e
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=500, detail="Git not installed") from e
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-@app.get("/workspace/git/status", tags=["Git"], operation_id="GitStatus")
-async def git_status(authenticated: bool = Depends(verify_token)):
-    """Get git status."""
-    return _run_git(["status"])
-
-
-@app.get("/workspace/git/log", tags=["Git"], operation_id="GitLog")
-async def git_log(limit: int = 10, authenticated: bool = Depends(verify_token)):
-    """Get commit history."""
-    return _run_git(["log", f"-{limit}", "--oneline", "--decorate", "--graph"])
-
-
-@app.get("/workspace/git/diff", tags=["Git"], operation_id="GitDiff")
-async def git_diff(
-    path: str | None = None,
-    staged: bool = False,
-    authenticated: bool = Depends(verify_token),
-):
-    """Show changes."""
-    command = ["diff"]
-    if staged:
-        command.append("--cached")
-    if path:
-        command.append(path)
-    return _run_git(command)
-
-
-class GitAddRequest(BaseModel):
-    path: str = Field(default=".", description="Path to stage")
-
-
-@app.post("/workspace/git/add", tags=["Git"], operation_id="GitAdd")
-async def git_add(add_data: GitAddRequest, authenticated: bool = Depends(verify_token)):
-    """Stage files for commit."""
-    return _run_git(["add", add_data.path])
-
-
-class GitCommitRequest(BaseModel):
-    message: str = Field(description="Commit message")
-
-
-@app.post("/workspace/git/commit", tags=["Git"], operation_id="GitCommit")
-async def git_commit(
-    commit_data: GitCommitRequest, authenticated: bool = Depends(verify_token)
-):
-    """Commit staged changes."""
-    return _run_git(["commit", "-m", commit_data.message])
-
-
-class GitResetRequest(BaseModel):
-    commit: str = Field(default="HEAD", description="Commit to reset to")
-    hard: bool = Field(default=False, description="Hard reset (discard changes)")
-
-
-@app.post("/workspace/git/reset", tags=["Git"], operation_id="GitReset")
-async def git_reset(
-    reset_data: GitResetRequest, authenticated: bool = Depends(verify_token)
-):
-    """Reset to commit."""
-    command = ["reset"]
-    if reset_data.hard:
-        command.append("--hard")
-    command.append(reset_data.commit)
-    return _run_git(command)
-
-
-# ============================================================================
 # Memory Operations
 # ============================================================================
 
@@ -746,7 +647,7 @@ async def delete_memory(memory_id: str, authenticated: bool = Depends(verify_tok
 # ============================================================================
 
 
-@app.get("/health", tags=["System"])
+@app.get("/health", tags=["System"], operation_id="HealthCheck")
 async def health_check():
     """Health check endpoint (no auth required)."""
     return {"status": "healthy", "version": "0.2.0", "api_style": "REST"}
@@ -834,7 +735,7 @@ async def grep_files(
 # Terraform Operations
 # ============================================================================
 
-@app.post("/terraform/init", tags=["Terraform"], operation_id="Terraforminit")
+@app.post("/terraform/init", tags=["Terraform"], operation_id="TerraformInit")
 async def terraform_init_endpoint(
     upgrade: bool = False,
     authenticated: bool = Depends(verify_token)
@@ -847,7 +748,7 @@ async def terraform_init_endpoint(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@app.post("/terraform/plan", tags=["Terraform"], operation_id="Terraformplan")
+@app.post("/terraform/plan", tags=["Terraform"], operation_id="TerraformPlan")
 async def terraform_plan_endpoint(
     var_file: str | None = None,
     out: str | None = None,
@@ -861,7 +762,7 @@ async def terraform_plan_endpoint(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@app.post("/terraform/apply", tags=["Terraform"], operation_id="Terraformapply")
+@app.post("/terraform/apply", tags=["Terraform"], operation_id="TerraformApply")
 async def terraform_apply_endpoint(
     auto_approve: bool = True,
     plan_file: str | None = None,
@@ -875,11 +776,191 @@ async def terraform_apply_endpoint(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@app.post("/terraform/validate", tags=["Terraform"], operation_id="Terraformvalidate")
+@app.post("/terraform/validate", tags=["Terraform"], operation_id="TerraformValidate")
 async def terraform_validate_endpoint(authenticated: bool = Depends(verify_token)):
     """Validate Terraform configuration."""
     from .tools.terraform_tools import terraform_validate
     try:
         return await terraform_validate()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+# ============================================================================
+# CI/Testing Tools
+# ============================================================================
+
+@app.post("/ci/make", tags=["CI"], operation_id="Make")
+async def make_endpoint(
+    target: str | None = None,
+    makefile: str | None = None,
+    authenticated: bool = Depends(verify_token)
+):
+    """Run make command."""
+    from .tools.ci_tools import make
+    return await make(target, makefile)
+
+
+@app.post("/ci/ruff", tags=["CI"], operation_id="Ruff")
+async def ruff_endpoint(
+    action: str = "check",
+    path: str = ".",
+    fix: bool = False,
+    authenticated: bool = Depends(verify_token)
+):
+    """Run Ruff linter."""
+    from .tools.ci_tools import ruff
+    return await ruff(action, path, fix)
+
+
+@app.post("/ci/black", tags=["CI"], operation_id="Black")
+async def black_endpoint(
+    path: str = ".",
+    check: bool = False,
+    authenticated: bool = Depends(verify_token)
+):
+    """Run Black formatter."""
+    from .tools.ci_tools import black
+    return await black(path, check)
+
+
+@app.post("/ci/pytest", tags=["CI"], operation_id="PytestRun")
+async def pytest_endpoint(
+    path: str | None = None,
+    markers: str | None = None,
+    verbose: bool = True,
+    authenticated: bool = Depends(verify_token)
+):
+    """Run pytest tests."""
+    from .tools.ci_tools import pytest_run
+    return await pytest_run(path, markers, verbose)
+
+
+# ============================================================================
+# ExecuteTurk Tracking
+# ============================================================================
+
+@app.get("/turk/info", tags=["Tracking"], operation_id="TurkInfo")
+async def turk_info_endpoint(authenticated: bool = Depends(verify_token)):
+    """Get ExecuteTurk usage statistics."""
+    from .tools.shell_tools import turk_info
+    return await turk_info()
+
+
+@app.post("/turk/reset", tags=["Tracking"], operation_id="TurkReset")
+async def turk_reset_endpoint(authenticated: bool = Depends(verify_token)):
+    """Reset ExecuteTurk tracking."""
+    from .tools.shell_tools import turk_reset
+    return await turk_reset()
+# Git Meta-Operation - replaces all individual git endpoints
+
+class GitRequest(BaseModel):
+    """Git operation request with detailed subcommand support.
+
+    Available actions:
+    - status: Show git status
+    - diff: Show changes (params: path, staged)
+    - add: Stage files (params: path)
+    - commit: Commit changes (params: message)
+    - log: View history (params: limit)
+    - reset: Reset to commit (params: commit, hard)
+    - blame: Show who changed lines (params: path)
+    - checkout: Switch branch (params: branch_or_commit, create_new)
+    - create_epoch_branch: Create epoch/n-name branch (params: number, descriptor)
+    - rebase_main: Rebase onto main
+    - push_branch: Push to remote (params: remote, force)
+    - squash_epoch: Squash epoch commits (params: message)
+    - merge_ff: Fast-forward merge (params: branch)
+    - tag_epoch: Tag as epoch-n-final (params: epoch_number, message)
+    - cherry_pick: Cherry-pick commit (params: commit_hash)
+    - sync: Fetch and rebase from remote (params: remote)
+    """
+    action: str = Field(description="Git action to perform")
+    path: str | None = Field(None, description="File path for diff/blame")
+    staged: bool | None = Field(None, description="Show staged changes (diff)")
+    message: str | None = Field(None, description="Commit/tag/squash message")
+    limit: int | None = Field(None, description="Number of log entries")
+    commit: str | None = Field(None, description="Commit hash for reset")
+    hard: bool | None = Field(None, description="Hard reset (reset)")
+    branch_or_commit: str | None = Field(None, description="Branch/commit for checkout")
+    create_new: bool | None = Field(None, description="Create new branch (checkout)")
+    number: int | None = Field(None, description="Epoch number")
+    descriptor: str | None = Field(None, description="Branch descriptor")
+    remote: str | None = Field(None, description="Remote name (default: origin)")
+    force: bool | None = Field(None, description="Force operation")
+    branch: str | None = Field(None, description="Branch name")
+    epoch_number: int | None = Field(None, description="Epoch number for tagging")
+    commit_hash: str | None = Field(None, description="Commit to cherry-pick")
+
+
+@app.post("/git", tags=["Git"], operation_id="Git")
+async def git_operation(
+    git_req: GitRequest,
+    authenticated: bool = Depends(verify_token)
+):
+    """Execute Git operations with detailed subcommand support.
+
+    This meta-operation provides access to all Git functionality through a single endpoint.
+    Specify the action and relevant parameters for the operation you want to perform.
+    """
+    from .tools import git_tools, git_sdlc_tools
+
+    action = git_req.action
+
+    try:
+        # Route to appropriate tool based on action
+        if action == "status":
+            return await git_tools.git_status()
+        elif action == "diff":
+            return await git_tools.git_diff(git_req.path, git_req.staged or False)
+        elif action == "add":
+            if not git_req.path:
+                raise ValueError("path required for add")
+            return await git_tools.git_add(git_req.path)
+        elif action == "commit":
+            if not git_req.message:
+                raise ValueError("message required for commit")
+            return await git_tools.git_commit(git_req.message)
+        elif action == "log":
+            return await git_tools.git_log(git_req.limit or 10)
+        elif action == "reset":
+            return await git_tools.git_reset(git_req.commit or "HEAD", git_req.hard or False)
+        elif action == "blame":
+            if not git_req.path:
+                raise ValueError("path required for blame")
+            return await git_tools.git_blame(git_req.path)
+        elif action == "checkout":
+            if not git_req.branch_or_commit:
+                raise ValueError("branch_or_commit required for checkout")
+            return await git_tools.git_checkout(git_req.branch_or_commit, git_req.create_new or False)
+        elif action == "create_epoch_branch":
+            if not git_req.number or not git_req.descriptor:
+                raise ValueError("number and descriptor required for create_epoch_branch")
+            return await git_sdlc_tools.git_create_epoch_branch(git_req.number, git_req.descriptor)
+        elif action == "rebase_main":
+            return await git_sdlc_tools.git_rebase_main()
+        elif action == "push_branch":
+            return await git_sdlc_tools.git_push_branch(git_req.remote or "origin", git_req.force or False)
+        elif action == "squash_epoch":
+            if not git_req.message:
+                raise ValueError("message required for squash_epoch")
+            return await git_sdlc_tools.git_squash_epoch(git_req.message)
+        elif action == "merge_ff":
+            return await git_sdlc_tools.git_fast_forward_merge(git_req.branch)
+        elif action == "tag_epoch":
+            if not git_req.epoch_number:
+                raise ValueError("epoch_number required for tag_epoch")
+            return await git_sdlc_tools.git_tag_epoch_final(git_req.epoch_number, git_req.message)
+        elif action == "cherry_pick":
+            if not git_req.commit_hash:
+                raise ValueError("commit_hash required for cherry_pick")
+            return await git_sdlc_tools.git_cherry_pick_phase(git_req.commit_hash)
+        elif action == "sync":
+            return await git_sdlc_tools.workspace_sync(git_req.remote or "origin")
+        else:
+            raise ValueError(f"Unknown git action: {action}")
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e

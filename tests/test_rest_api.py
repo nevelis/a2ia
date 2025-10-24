@@ -214,8 +214,12 @@ class TestRESTGit:
     """Test Git operations."""
 
     async def test_git_status(self, client, auth_headers, temp_workspace):
-        """GET /workspace/git/status."""
-        response = await client.get("/workspace/git/status", headers=auth_headers)
+        """POST /git with action=status."""
+        response = await client.post(
+            "/git",
+            headers=auth_headers,
+            json={"action": "status"}
+        )
         assert response.status_code == 200
         data = response.json()
         assert "success" in data
@@ -229,23 +233,27 @@ class TestRESTGit:
             json={"content": "print('hello')"}
         )
 
-        # Stage
+        # Stage using Git meta-operation
         add_response = await client.post(
-            "/workspace/git/add", headers=auth_headers, json={"path": "."}
+            "/git",
+            headers=auth_headers,
+            json={"action": "add", "path": "."}
         )
         assert add_response.status_code == 200
 
-        # Commit
+        # Commit using Git meta-operation
         commit_response = await client.post(
-            "/workspace/git/commit",
+            "/git",
             headers=auth_headers,
-            json={"message": "Add main.py"},
+            json={"action": "commit", "message": "Add main.py"}
         )
         assert commit_response.status_code == 200
 
-        # View log
-        log_response = await client.get(
-            "/workspace/git/log?limit=5", headers=auth_headers
+        # View log using Git meta-operation
+        log_response = await client.post(
+            "/git",
+            headers=auth_headers,
+            json={"action": "log", "limit": 5}
         )
         assert log_response.status_code == 200
         assert "Add main.py" in log_response.json()["stdout"]
