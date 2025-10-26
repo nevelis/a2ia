@@ -51,101 +51,73 @@ class TestMCPClient:
 
 
 @pytest.mark.integration
-@pytest.mark.skip(reason="Using SimpleMCPClient instead - MCP stdio protocol complex")
-class TestMCPIntegration:
-    """Integration tests with real A2IA MCP server."""
+class TestSimpleMCPIntegration:
+    """Integration tests with SimpleMCPClient (direct function calls)."""
 
-    async def test_connect_to_mcp_server(self):
-        """Connect to A2IA MCP server via stdio."""
-        from a2ia.client.mcp import MCPClient
+    async def test_list_tools(self):
+        """List available tools from SimpleMCPClient."""
+        from a2ia.client.simple_mcp import SimpleMCPClient
 
-        client = MCPClient(
-            server_command=["python3", "-m", "a2ia.server", "--mode", "mcp"]
+        client = SimpleMCPClient(
+            server_command=["python3", "-m", "a2ia.mcp_server"]
         )
 
-        try:
-            await client.connect()
-            assert client.connected
-            assert client.process is not None
-        finally:
-            await client.disconnect()
+        tools = client.list_tools()
 
-    async def test_list_tools_from_server(self):
-        """List available tools from MCP server."""
-        from a2ia.client.mcp import MCPClient
+        # Should have all our A2IA tools
+        tool_names = [t["function"]["name"] for t in tools]
 
-        client = MCPClient(
-            server_command=["python3", "-m", "a2ia.server", "--mode", "mcp"]
+        assert "ReadFile" in tool_names
+        assert "WriteFile" in tool_names
+        assert "ExecuteCommand" in tool_names
+        assert "GitStatus" in tool_names
+        assert "StoreMemory" in tool_names
+
+        # Should be at least 30+ tools
+        assert len(tools) >= 30
+
+    async def test_call_tool_git_status(self):
+        """Call git_status tool via SimpleMCPClient."""
+        from a2ia.client.simple_mcp import SimpleMCPClient
+
+        client = SimpleMCPClient(
+            server_command=["python3", "-m", "a2ia.mcp_server"]
         )
 
-        try:
-            await client.connect()
-            tools = client.list_tools()
+        # Call git_status tool (bypasses stdio, calls directly)
+        result = await client.call_tool("GitStatus", {})
 
-            # Should have all our A2IA tools
-            tool_names = [t["function"]["name"] for t in tools]
+        assert isinstance(result, dict)
+        assert "success" in result
+        assert "stdout" in result
 
-            assert "read_file" in tool_names
-            assert "write_file" in tool_names
-            assert "execute_command" in tool_names
-            assert "git_status" in tool_names
-            assert "store_memory" in tool_names
+    async def test_call_tool_workspace_info(self):
+        """Call get_workspace_info tool via SimpleMCPClient."""
+        from a2ia.client.simple_mcp import SimpleMCPClient
 
-            # Should be at least 20+ tools
-            assert len(tools) >= 20
+        client = SimpleMCPClient(
+            server_command=["python3", "-m", "a2ia.mcp_server"]
+        )
 
-        finally:
-            await client.disconnect()
+        result = await client.call_tool("GetWorkspaceInfo", {})
 
-    async def test_call_tool_read_file(self):
-        """Call read_file tool via MCP."""
-        from a2ia.client.mcp import MCPClient
-        import tempfile
-        from pathlib import Path
-
-        # Create a temp workspace
-        with tempfile.TemporaryDirectory() as tmpdir:
-            test_file = Path(tmpdir) / "test.txt"
-            test_file.write_text("Hello MCP!")
-
-            client = MCPClient(
-                server_command=["python3", "-m", "a2ia.server", "--mode", "mcp"]
-            )
-
-            try:
-                await client.connect()
-
-                # Call read_file tool
-                result = await client.call_tool("read_file", {"path": "test.txt"})
-
-                assert "content" in result
-                # Note: This will fail because MCP server uses a different workspace
-                # Just testing the call mechanism works
-
-            finally:
-                await client.disconnect()
+        assert isinstance(result, dict)
+        assert "path" in result
 
     async def test_concurrent_tool_calls(self):
-        """Call multiple tools concurrently."""
-        from a2ia.client.mcp import MCPClient
+        """Call multiple tools concurrently via SimpleMCPClient."""
+        from a2ia.client.simple_mcp import SimpleMCPClient
 
-        client = MCPClient(
-            server_command=["python3", "-m", "a2ia.server", "--mode", "mcp"]
+        client = SimpleMCPClient(
+            server_command=["python3", "-m", "a2ia.mcp_server"]
         )
 
-        try:
-            await client.connect()
+        # Call multiple tools concurrently
+        results = await asyncio.gather(
+            client.call_tool("GetWorkspaceInfo", {}),
+            client.call_tool("GitStatus", {}),
+        )
 
-            # Call multiple tools
-            results = await asyncio.gather(
-                client.call_tool("get_workspace_info", {}),
-                client.call_tool("git_status", {}),
-                client.call_tool("list_directory", {"path": ""}),
-            )
-
-            assert len(results) == 3
-            # All should return dictionaries
-            assert all(isinstance(r, dict) for r in results)
-
-        finally:
-            await client.disconnect()
+        assert len(results) == 2
+        # All should return dictionaries
+        assert all(isinstance(r, dict) for r in results)

@@ -104,12 +104,15 @@ async def recall_memory(
     Args:
         query: The semantic search query
         limit: Maximum number of results to return (default: 5)
-        tags: Optional tags to filter results
+        tags: Optional tags to filter results (case-insensitive)
 
     Returns:
         Dictionary with list of matching memories
     """
     collection = _get_memory_collection()
+
+    # Normalize tags to lowercase for case-insensitive matching
+    normalized_tags = [tag.lower() for tag in tags] if tags else None
 
     # Build where filter for tags
     where_filter = None
@@ -118,8 +121,9 @@ async def recall_memory(
         # We'll filter in Python after retrieval for flexibility
         pass
 
-    # Semantic search
-    results = collection.query(query_texts=[query], n_results=limit, where=where_filter)
+    # Semantic search - request more results if we need to filter by tags
+    search_limit = limit * 3 if normalized_tags else limit
+    results = collection.query(query_texts=[query], n_results=search_limit, where=where_filter)
 
     # Parse results
     memories = []
@@ -135,9 +139,10 @@ async def recall_memory(
             if "tags" in metadata:
                 mem_tags = metadata["tags"].split(",") if metadata["tags"] else []
 
-            # Filter by tags if specified
-            if tags:
-                if not any(tag in mem_tags for tag in tags):
+            # Filter by tags if specified (case-insensitive)
+            if normalized_tags:
+                mem_tags_lower = [t.lower() for t in mem_tags]
+                if not any(tag in mem_tags_lower for tag in normalized_tags):
                     continue
 
             # Convert distance to similarity (ChromaDB uses L2 distance)
@@ -157,6 +162,10 @@ async def recall_memory(
             }
             memories.append(memory)
 
+            # Stop once we have enough results
+            if len(memories) >= limit:
+                break
+
     return {"query": query, "memories": memories, "count": len(memories)}
 
 
@@ -168,13 +177,16 @@ async def list_memories(
 
     Args:
         limit: Maximum number of memories to return (default: 20)
-        tags: Optional tags to filter by
+        tags: Optional tags to filter by (case-insensitive)
         since: Optional ISO timestamp to filter memories after this date
 
     Returns:
         Dictionary with list of memories and total count
     """
     collection = _get_memory_collection()
+
+    # Normalize tags to lowercase for case-insensitive matching
+    normalized_tags = [tag.lower() for tag in tags] if tags else None
 
     # Get all memories (ChromaDB doesn't have great filtering for "list all")
     # We'll use a dummy query and filter in Python
@@ -185,9 +197,10 @@ async def list_memories(
         if total_count == 0:
             return {"memories": [], "total": 0, "limit": limit}
 
-        # Get all items (up to limit)
+        # Get all items (request more if we need to filter)
+        fetch_limit = min(limit * 3 if normalized_tags or since else limit, total_count)
         results = collection.get(
-            limit=min(limit, total_count), include=["documents", "metadatas"]
+            limit=fetch_limit, include=["documents", "metadatas"]
         )
 
         memories = []
@@ -201,9 +214,10 @@ async def list_memories(
             if "tags" in metadata:
                 mem_tags = metadata["tags"].split(",") if metadata["tags"] else []
 
-            # Filter by tags if specified
-            if tags:
-                if not any(tag in mem_tags for tag in tags):
+            # Filter by tags if specified (case-insensitive)
+            if normalized_tags:
+                mem_tags_lower = [t.lower() for t in mem_tags]
+                if not any(tag in mem_tags_lower for tag in normalized_tags):
                     continue
 
             # Filter by timestamp if specified
@@ -222,6 +236,10 @@ async def list_memories(
                 },
             }
             memories.append(memory)
+
+            # Stop once we have enough
+            if len(memories) >= limit:
+                break
 
         return {
             "memories": memories,

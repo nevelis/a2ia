@@ -245,27 +245,3 @@ class SimpleMCPClient:
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.disconnect()
-
-        # Terraform tools (TitleCase names)
-        tools.extend([
-            {"type": "function", "function": {"name": "TerraformInit", "description": "Initialize Terraform", "parameters": {"type": "object", "properties": {"upgrade": {"type": "boolean"}}}}},
-            {"type": "function", "function": {"name": "TerraformPlan", "description": "Generate execution plan", "parameters": {"type": "object", "properties": {"var_file": {"type": "string"}, "out": {"type": "string"}}}}},
-            {"type": "function", "function": {"name": "TerraformApply", "description": "Apply changes (auto-approved)", "parameters": {"type": "object", "properties": {"auto_approve": {"type": "boolean"}, "plan_file": {"type": "string"}}}}},
-            {"type": "function", "function": {"name": "TerraformDestroy", "description": "Destroy infrastructure", "parameters": {"type": "object", "properties": {"auto_approve": {"type": "boolean"}}}}},
-            {"type": "function", "function": {"name": "TerraformValidate", "description": "Validate configuration", "parameters": {"type": "object"}}},
-            {"type": "function", "function": {"name": "TerraformWorkspace", "description": "Manage workspaces", "parameters": {"type": "object", "properties": {"name": {"type": "string"}, "action": {"type": "string"}}, "required": ["name"]}}},
-            {"type": "function", "function": {"name": "TerraformImport", "description": "Import existing resource", "parameters": {"type": "object", "properties": {"address": {"type": "string"}, "id": {"type": "string"}}, "required": ["address", "id"]}}},
-            {"type": "function", "function": {"name": "TerraformState", "description": "Manage state", "parameters": {"type": "object", "properties": {"action": {"type": "string"}, "args": {"type": "array"}}, "required": ["action"]}}},
-            {"type": "function", "function": {"name": "TerraformTaint", "description": "Mark resource for recreation", "parameters": {"type": "object", "properties": {"address": {"type": "string"}}, "required": ["address"]}}},
-            {"type": "function", "function": {"name": "TerraformUntaint", "description": "Remove taint mark", "parameters": {"type": "object", "properties": {"address": {"type": "string"}}, "required": ["address"]}}},
-            {"type": "function", "function": {"name": "TerraformOutput", "description": "Get output values", "parameters": {"type": "object", "properties": {"name": {"type": "string"}}}}},
-        ])
-
-        return tools
-
-    async def __aenter__(self):
-        await self.connect()
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self.disconnect()

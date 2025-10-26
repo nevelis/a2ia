@@ -162,20 +162,6 @@ async def git_restore(path: str) -> dict:
 
 
 @mcp.tool()
-async def git_show(commit: str = "HEAD") -> dict:
-    """Show the changes in a specific commit.
-
-    Args:
-        commit: Commit hash or reference (default: "HEAD")
-
-    Returns:
-        Dictionary with commit details
-    """
-    result = _run_git_command(["show", commit])
-    return result
-
-
-@mcp.tool()
 async def git_branch(list_all: bool = True) -> dict:
     """List git branches.
 
