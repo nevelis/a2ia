@@ -1,21 +1,20 @@
 # A2IA Chronicle
-This document serves as the immutable historical ledger of completed work and significant milestones within the `a2ia/` subsystem.
+Historical ledger of major milestones and completed engineering work.
 
 ---
 
-## 2025-10-25 — Initialization Phase
-- Established subsystem documentation framework.
-- Generated `A2IA.md` master architecture and development log.
-- Defined `A2IA-Chronicle.md` (this file) and `A2IA-Continuum.md` templates.
-- Inspected and analyzed `filesystem_tools.py` implementation.
-- Identified critical issues:
-  - `append_file()` fully rewrites target files instead of performing incremental append.
-  - `truncate_file()` attempts to open in `'r+'` mode, causing failures for non-existent or protected files.
+### [2025-10-26] — Patch & Truncate Restoration
+**Commit:** 8e3e4cb  
+**Summary:** Implemented robust `patch_file()` and `truncate_file()` tools with full sandboxed testing.  
 
-### Next Objective
-Implement and validate corrected filesystem operations via a TDD workflow.
+**Details:**  
+- Rewrote `patch_file()` to operate workspace-relative with proper `cwd`.  
+- Added newline-safety to patch temp files.  
+- Eliminated recursion caused by local import of `subprocess`.  
+- Confirmed with four comprehensive sandboxed patch tests (all passed).  
+- `truncate_file()` rewritten to correctly create/truncate safely within workspace.  
+- 20 tests still failing due to missing filesystem tools (`append_file`, `edit_file`, `grep`, `head`, `tail`, `find_replace`, `prune_directory`, etc.).  
+
+**Next:** Begin restoration of missing filesystem tools per `A2IA-Continuum.md`.
 
 ---
-
-## Historical Context
-This Chronicle mirrors the practices of prior A2IA systems — maintaining transparent, auditable records of progress and design rationale.
