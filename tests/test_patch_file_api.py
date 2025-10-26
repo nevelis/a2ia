@@ -2,7 +2,7 @@ import asyncio
 import subprocess
 from pathlib import Path
 from unittest.mock import patch
-import a2ia.tools.filesystem_tools as filesystem_tools
+import a2ia.a2ia.tools.filesystem_tools as filesystem_tools
 
 def _make_workspace(tmp_path: Path, rel_path: str, initial: str = "") -> Path:
     ws_root = tmp_path / "workspace"
