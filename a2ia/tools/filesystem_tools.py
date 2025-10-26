@@ -35,22 +35,101 @@ async def move_file(source: str, destination: str) -> dict:
     return ws.move_file(source, destination)
 
 @mcp.tool()
-async def truncate_file(path: str) -> dict:
-    """
-    Truncates the given file to length 0.
-    Creates the file if it does not exist.
-    Operates safely within the workspace boundary.
-    """
+async def append_file(path: str, content: str, encoding: str = "utf-8") -> dict:
     ws = get_workspace()
     file_path = ws.resolve_path(path)
-
     try:
         os.makedirs(file_path.parent, exist_ok=True)
-        with open(file_path, "w", encoding="utf-8"):
-            pass
+        with open(file_path, "a", encoding=encoding) as f:
+            f.write(content)
         return {"success": True, "path": str(file_path)}
     except Exception as e:
         return {"success": False, "error": str(e), "path": str(file_path)}
+
+@mcp.tool()
+async def truncate_file(path: str, length: int = 0) -> dict:
+    ws = get_workspace()
+    file_path = ws.resolve_path(path)
+    try:
+        os.makedirs(file_path.parent, exist_ok=True)
+        with open(file_path, "r+b" if file_path.exists() else "wb") as f:
+            f.truncate(length)
+        return {"success": True, "path": str(file_path), "length": length}
+    except Exception as e:
+        return {"success": False, "error": str(e), "path": str(file_path)}
+
+@mcp.tool()
+async def head(path: str, lines: int = 10) -> dict:
+    ws = get_workspace()
+    file_path = ws.resolve_path(path)
+    try:
+        result = subprocess.run(
+            ["head", f"-n{lines}", str(file_path)],
+            cwd=ws.path,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        return {"success": True, "path": str(file_path), "lines": result.stdout.splitlines()}
+    except Exception as e:
+        return {"success": False, "error": str(e), "path": str(file_path)}
+
+@mcp.tool()
+async def tail(path: str, lines: int = 10) -> dict:
+    ws = get_workspace()
+    file_path = ws.resolve_path(path)
+    try:
+        result = subprocess.run(
+            ["tail", f"-n{lines}", str(file_path)],
+            cwd=ws.path,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        return {"success": True, "path": str(file_path), "lines": result.stdout.splitlines()}
+    except Exception as e:
+        return {"success": False, "error": str(e), "path": str(file_path)}
+
+@mcp.tool()
+async def grep(pattern: str, path: str = ".", regex: bool = False, ignore_case: bool = False, before_lines: int = 0, after_lines: int = 0) -> dict:
+    """Search for a pattern within files under the given path using system grep, with optional context lines."""
+    ws = get_workspace()
+    root_path = ws.resolve_path(path)
+
+    flags = ["-n", "-r"]
+    if ignore_case:
+        flags.append("-i")
+    if not regex:
+        flags.append("-F")
+    if before_lines > 0:
+        flags.append(f"-B{before_lines}")
+    if after_lines > 0:
+        flags.append(f"-A{after_lines}")
+
+    try:
+        result = subprocess.run(
+            ["grep", *flags, pattern, str(root_path)],
+            cwd=ws.path,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        matches = []
+        if result.stdout.strip():
+            for line in result.stdout.strip().splitlines():
+                if line.startswith("--"):
+                    continue  # skip grep context separators
+                parts = line.split(":", 2)
+                if len(parts) == 3:
+                    matches.append({"path": parts[0], "line": int(parts[1]), "text": parts[2]})
+
+        return {"success": True, "matches": matches, "stderr": result.stderr.strip()}
+
+    except subprocess.CalledProcessError as e:
+        return {"success": False, "error": e.stderr.strip()}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 @mcp.tool()
 async def patch_file(path: str, diff: str) -> dict:
