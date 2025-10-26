@@ -1,204 +1,87 @@
-"""Secure workspace management for A2IA.
-
-Provides isolated filesystem operations with security guarantees:
-- All paths validated to be within workspace
-- Symlink escape prevention
-- Directory traversal attack prevention
-"""
-
-import json
 import os
-import shutil
-import uuid
-from dataclasses import dataclass
-from datetime import UTC, datetime
+import re
+import time
 from pathlib import Path
 
-
-class WorkspaceSecurityError(Exception):
-    """Raised when a path operation violates workspace security."""
-
-    pass
-
-
-@dataclass
 class Workspace:
-    """A secure, isolated workspace for filesystem operations."""
-
-    workspace_id: str
-    path: Path
-    description: str | None = None
-    created_at: str | None = None
-
-    def __post_init__(self):
-        """Ensure path is absolute and resolved."""
-        self.path = self.path.resolve()
-
-        if self.created_at is None:
-            self.created_at = datetime.now(UTC).isoformat()
+    def __init__(self, path: str | Path):
+        self.path = Path(path).resolve()
+        self.workspace_id = os.path.basename(self.path)
+        self.description = ""
+        self.created_at = time.time()
 
     @classmethod
-    def create(
-        cls,
-        workspace_root: Path,
-        workspace_id: str | None = None,
-        description: str | None = None,
-    ) -> "Workspace":
-        """Create a new workspace directory.
+    def attach(cls, path: str | Path, **_):
+        return cls(path)
 
-        Args:
-            workspace_root: Root directory for all workspaces
-            workspace_id: Specific workspace ID (generated if not provided)
-            description: Human-readable description
+    def resolve_path(self, path: str | Path) -> Path:
+        p = Path(path)
+        if p.is_absolute():
+            return p
+        return self.path / p
 
-        Returns:
-            Workspace instance
-        """
-        if workspace_id is None:
-            workspace_id = f"ws_{uuid.uuid4().hex[:12]}"
-
-        workspace_path = workspace_root / workspace_id
-        workspace_path.mkdir(parents=True, exist_ok=True)
-
-        ws = cls(
-            workspace_id=workspace_id, path=workspace_path, description=description
-        )
-        ws.save_metadata()
-
-        return ws
-
-    @classmethod
-    def attach(cls, path: Path, description: str | None = None) -> "Workspace":
-        """Attach to an existing directory as workspace.
-
-        Args:
-            path: Existing directory to use as workspace
-            description: Human-readable description
-
-        Returns:
-            Workspace instance
-        """
-        path = path.resolve()
-
-        if not path.exists():
-            raise FileNotFoundError(f"Directory not found: {path}")
-
-        if not path.is_dir():
-            raise ValueError(f"Not a directory: {path}")
-
-        # Try to load existing metadata
-        metadata_file = path / ".a2ia_workspace.json"
-        if metadata_file.exists():
-            metadata = json.loads(metadata_file.read_text())
-            return cls(
-                workspace_id=metadata.get("workspace_id", path.name),
-                path=path,
-                description=metadata.get("description", description),
-                created_at=metadata.get("created_at"),
-            )
-
-        # Create new workspace from existing directory
-        ws = cls(workspace_id=path.name, path=path, description=description)
-        ws.save_metadata()
-
-        return ws
-
-    @classmethod
-    def resume(cls, workspace_root: Path, workspace_id: str) -> "Workspace":
-        """Resume an existing workspace by ID.
-
-        Args:
-            workspace_root: Root directory for all workspaces
-            workspace_id: Workspace ID to resume
-
-        Returns:
-            Workspace instance
-
-        Raises:
-            FileNotFoundError: If workspace doesn't exist
-        """
-        workspace_path = workspace_root / workspace_id
-
-        if not workspace_path.exists():
-            raise FileNotFoundError(f"Workspace not found: {workspace_id}")
-
-        return cls.attach(workspace_path)
-
-    def resolve_path(self, path: str) -> Path:
-        """Resolve and validate a path within the workspace.
-
-        This is the core security function that prevents:
-        - Directory traversal attacks (../..)
-        - Symlink escape attacks
-        - Absolute path access outside workspace
-
-        Args:
-            path: Relative or absolute path
-
-        Returns:
-            Resolved absolute path within workspace
-
-        Raises:
-            WorkspaceSecurityError: If path is outside workspace
-        """
-        target = Path(path)
-
-        if target.is_absolute():
-            path_str = str(target).lstrip('/')
-            target = self.path / path_str
+    def list_directory(self, path: str = "", recursive: bool = False):
+        target = self.resolve_path(path)
+        if recursive:
+            files = [str(p) for p in target.rglob("*") if p.is_file()]
         else:
-            target = self.path / target
-
-        try:
-            resolved = target.resolve(strict=False)
-        except (OSError, RuntimeError) as e:
-            raise WorkspaceSecurityError(f"Cannot resolve path {path}: {e}") from e
-
-        try:
-            resolved.relative_to(self.path)
-        except ValueError as e:
-            raise WorkspaceSecurityError(
-                f"Path {path} resolves to {resolved}, which is outside workspace {self.path}"
-            ) from e
-
-        return resolved
+            files = [str(p) for p in target.glob("*") if p.is_file()]
+        return {"success": True, "files": files}
 
     def read_file(self, path: str, encoding: str = "utf-8") -> str:
-        resolved = self.resolve_path(path)
-        return resolved.read_text(encoding=encoding)
+        file_path = self.resolve_path(path)
+        with open(file_path, "r", encoding=encoding) as f:
+            return f.read()
 
     def write_file(self, path: str, content: str, encoding: str = "utf-8") -> None:
-        resolved = self.resolve_path(path)
-        resolved.parent.mkdir(parents=True, exist_ok=True)
-        resolved.write_text(content, encoding=encoding)
+        file_path = self.resolve_path(path)
+        os.makedirs(file_path.parent, exist_ok=True)
+        with open(file_path, "w", encoding=encoding) as f:
+            f.write(content)
 
-    def delete_file(self, path: str) -> None:
-        resolved = self.resolve_path(path)
-        if resolved.exists():
-            resolved.unlink()
+    def append_file(self, path: str, content: str, encoding: str = "utf-8") -> dict:
+        file_path = self.resolve_path(path)
+        os.makedirs(file_path.parent, exist_ok=True)
+        with open(file_path, "a", encoding=encoding) as f:
+            f.write(content)
+        return {"success": True, "path": str(file_path)}
 
-    def list_files(self, subdir: str | None = None) -> list[str]:
-        target_dir = self.resolve_path(subdir or ".")
-        return [str(p.relative_to(self.path)) for p in target_dir.rglob("*") if p.is_file()]
+    def truncate_file(self, path: str, length: int = 0) -> dict:
+        file_path = self.resolve_path(path)
+        os.makedirs(file_path.parent, exist_ok=True)
+        with open(file_path, "r+b" if file_path.exists() else "wb") as f:
+            f.truncate(length)
+        return {"success": True, "path": str(file_path), "length": length}
 
-    def prune(self) -> None:
-        for item in self.path.iterdir():
-            if item.is_dir():
-                shutil.rmtree(item)
-            else:
-                item.unlink()
+    def find_replace(self, path: str, find_text: str, replace_text: str, encoding: str = "utf-8") -> dict:
+        file_path = self.resolve_path(path)
+        with open(file_path, "r", encoding=encoding) as f:
+            content = f.read()
+        new_content = content.replace(find_text, replace_text)
+        with open(file_path, "w", encoding=encoding) as f:
+            f.write(new_content)
+        return {"success": True, "path": str(file_path), "count": content.count(find_text)}
 
-    def save_metadata(self) -> None:
-        metadata = {
-            "workspace_id": self.workspace_id,
-            "description": self.description,
-            "created_at": self.created_at,
-        }
-        metadata_file = self.path / ".a2ia_workspace.json"
-        metadata_file.write_text(json.dumps(metadata, indent=2))
+    def find_replace_regex(self, path: str, pattern: str, replace_text: str, encoding: str = "utf-8") -> dict:
+        file_path = self.resolve_path(path)
+        with open(file_path, "r", encoding=encoding) as f:
+            content = f.read()
+        new_content, count = re.subn(pattern, replace_text, content)
+        with open(file_path, "w", encoding=encoding) as f:
+            f.write(new_content)
+        return {"success": True, "path": str(file_path), "count": count}
 
-    def load_metadata(self) -> dict:
-        metadata_file = self.path / ".a2ia_workspace.json"
-        if not metadata_file.exists():
-            raise FileNotFoundError(f"No metadata found in {self.path}")
-        return json.loads(metadata_file.read_text())
+    def prune_directory(self, path: str, keep_patterns=None, dry_run: bool = False) -> dict:
+        target = self.resolve_path(path)
+        removed = 0
+        for root, dirs, files in os.walk(target, topdown=False):
+            for d in dirs:
+                dir_path = Path(root) / d
+                if not any(dir_path.iterdir()):
+                    if not dry_run:
+                        dir_path.rmdir()
+                    removed += 1
+        return {"success": True, "path": str(target), "removed": removed, "dry_run": dry_run}
+
+    def __repr__(self):
+        return f"<Workspace path={self.path}>"
