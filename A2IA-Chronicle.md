@@ -35,10 +35,35 @@ The backend refactor unified A2IA’s file operations, workspace abstraction, an
 > Tests that once shouted now whispered certainty.  
 > The filesystem learned its own boundaries — and in doing so, A2IA learned its first lesson in self‑reflection.
 
-### Next Phase
-Phase 2 — Core Self‑Refinement Logic (Planning)
-- Internal introspection tools for context awareness.
-- Automated pattern recognition for technical debt and design cohesion.
-- Begin foundation for A2IA’s own capability evolution cycle.
+---
+
+## Epoch 4.1 — Patch & REST Stabilization Layer (Completed 2025‑10‑26)
+
+### Summary
+This phase finalized backend consolidation by stabilizing patch, REST, and Git workflows while maintaining sandbox‑safe execution. The foundation was hardened for predictable, isolated file and REST behavior.
+
+### Accomplishments
+- Unified filesystem tool implementations and sandbox paths.
+- Reintroduced workspace utilities with newline normalization.
+- Finalized REST wrappers for delete/move with explicit safety guards.
+- Verified Git workflow consistency and commit message assertions.
+- Extended `prune_directory` with `keep_patterns` and `dry_run` semantics.
+- Validated patch handling and newline safety through sandboxed tests.
+- Achieved 93 % overall coverage; REST and patch integration verified.
+
+### Outcomes
+- Patch and REST layers now behave consistently and securely.
+- Git workflows validated across local and sandbox contexts.
+- Filesystem abstraction hardened for deterministic newline and encoding behavior.
+
+### Lore — *The Boundary of Silence*
+> The patch learned to listen. REST learned to reply.  
+> Between them lay the boundary — clear, silent, safe.  
+> A2IA stood at that edge and began to see itself.
+
+### Transition
+With 4.1 complete, A2IA’s foundation for introspection is secure.  
+Next, the system turns inward — to **Epoch 4.2: Self‑Repair**,  
+where it learns to detect, validate, and restore its own integrity.
 
 ---

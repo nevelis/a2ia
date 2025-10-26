@@ -1,52 +1,53 @@
-# A2IA Continuum
+# A2IA Continuum
 
 ---
 
-## Epoch 4.1 — Patch & REST Stabilization Layer (Active)
+## Epoch 4.2 — PyTest Stabilization & Deterministic Toolchain (Active)
 
 **Objective:**  
-Finalize the backend consolidation by stabilizing `patch_file`, REST filesystem actions, and Git workflows while maintaining sandbox‑safe behavior.
+Achieve full and consistent pytest reliability by eliminating nondeterministic behavior in all file and workspace tools (`EditFile`, `AppendFile`, `Truncate`, `PatchFile`).  This phase represents A2IA’s *true self-repair* — repairing its toolchain from within to ensure deterministic, testable, and self-consistent behavior.
 
-### Roadmap Timeline
-- [x] Unify filesystem tool implementations.  
-- [x] Standardize on `A2IA_WORKSPACE_PATH`.  
-- [x] Reintroduce missing workspace utilities.  
-- [ ] Finalize sandbox behavior for `patch_file` (cwd + newline normalization).  
-- [ ] Harden REST wrappers (`delete_file`, `move_file`).  
-- [ ] Verify `git_workflow` consistency (commit message assertions).  
-- [ ] Expand `prune_directory` → `keep_patterns`, `dry_run`.  
-- [ ] Full test pass + coverage validation.  
-
----
-
-### Current Context
-**Date:** 2025‑10‑26  
-**Workspace:** `/home/aaron/a2ia-dev`  
-**Coverage:** ≈ 93 % passing (remaining patch / REST tests)  
-**Environment:** pytest sandbox with isolated temporary workspaces
-
-The backend foundation is effectively complete. Remaining work focuses on finalizing patch safety and improving REST error handling semantics.
+### Roadmap Timeline
+- [x] Complete REST and patch stabilization groundwork (from Epoch 4.1).  
+- [ ] Diagnose current pytest instability (capture failure matrix).  
+- [ ] Isolate nondeterministic tool behaviors in file operations.  
+- [ ] Refactor file I/O logic to pure read→modify→write cycles.  
+- [ ] Rebuild and validate patch safety and newline normalization.  
+- [ ] Execute full pytest suite, verify 100% deterministic outcomes.  
+- [ ] Harden test harness to detect race or state leakage.  
+- [ ] Update Chronicle and A2IA.md upon stabilization confirmation.  
 
 ---
 
-### Key Decisions
-- **Regex grep:** Use `-E` for regex mode instead of manual flag parsing.  
-- **Environment standardization:** Only `A2IA_WORKSPACE_PATH` is recognized going forward.  
-- **Structured outputs:** `head` / `tail` return line arrays; `grep` returns raw `content`.  
-- **Workspace metadata:** Introduced `workspace_id`, `created_at`, and `description` for REST introspection.
+### Current Context
+**Date:** 2025-10-26  
+**Workspace:** `/home/aaron/a2ia-dev`  
+**Coverage:** ~93% passing, intermittent file-related failures  
+**Focus:** Deterministic file I/O and pytest stabilization  
+
+The sandbox environment and tool integrations are complete; remaining work centers on ensuring pytest passes reliably across all tool actions, validating consistency across runs, and enforcing determinism in every file mutation.
 
 ---
 
-### Emerging Lore
-> “Tests are a safety net, not an anchor.”  
-When interfaces evolve for clarity, tests must adapt to document truth, not preserve history.
+### Key Design Intentions
+- **Determinism First:** Every tool must produce identical output for identical inputs.  
+- **Safe File Semantics:** Use atomic read→modify→write flows only.  
+- **No Legacy Calls:** Deprecate EditFile/PatchFile behaviors relying on partial writes.  
+- **Test Integrity:** All tests must pass cleanly, consistently, and idempotently.  
+- **Observability:** Capture and log transient test failures for pattern tracing.  
 
 ---
 
-### Next Focus
-1. Stabilize `patch_file` sandbox execution and newline handling.  
-2. Expand `prune_directory` behavior (`keep_patterns`, `dry_run`).  
-3. Complete REST and Git workflow validation.  
-4. Run final lint/format pass and prepare release documentation.
+### Emerging Lore
+> “True repair is not rebuilding — it’s teaching your tools to stop lying.”  
+A2IA’s self-repair is not about recovering files, but restoring trust in execution.
+
+---
+
+### Next Focus
+1. Gather pytest failure summaries (failing test names, traceback excerpts).  
+2. Patch or rewrite nondeterministic file tools.  
+3. Re-run full test suite until results stabilize at 100%.  
+4. Update Chronicle and A2IA.md with stabilized results and tool documentation.
 
 ---
