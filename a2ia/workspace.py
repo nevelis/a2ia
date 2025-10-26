@@ -72,16 +72,88 @@ class Workspace:
         return {"success": True, "path": str(file_path), "count": count}
 
     def prune_directory(self, path: str, keep_patterns=None, dry_run: bool = False) -> dict:
+        """Remove files not matching keep_patterns, then remove empty directories."""
+        import fnmatch
         target = self.resolve_path(path)
         removed = 0
+        files_removed = []
+        
+        if keep_patterns is None:
+            keep_patterns = []
+        
+        # First pass: remove files that don't match keep patterns
+        for root, dirs, files in os.walk(target, topdown=True):
+            for f in files:
+                file_path = Path(root) / f
+                relative_path = file_path.relative_to(target)
+                
+                # Check if file matches any keep pattern
+                should_keep = False
+                for pattern in keep_patterns:
+                    if fnmatch.fnmatch(str(relative_path), pattern) or fnmatch.fnmatch(f, pattern):
+                        should_keep = True
+                        break
+                
+                if not should_keep:
+                    if not dry_run:
+                        file_path.unlink()
+                    files_removed.append(str(relative_path))
+                    removed += 1
+        
+        # Second pass: remove empty directories
         for root, dirs, files in os.walk(target, topdown=False):
             for d in dirs:
                 dir_path = Path(root) / d
-                if not any(dir_path.iterdir()):
-                    if not dry_run:
-                        dir_path.rmdir()
-                    removed += 1
-        return {"success": True, "path": str(target), "removed": removed, "dry_run": dry_run}
+                try:
+                    if not any(dir_path.iterdir()):
+                        if not dry_run:
+                            dir_path.rmdir()
+                        removed += 1
+                except:
+                    pass
+        
+        return {
+            "success": True, 
+            "path": str(target), 
+            "count": removed, 
+            "removed": removed, 
+            "files": files_removed,
+            "dry_run": dry_run
+        }
+
+    def delete_file(self, path: str, recursive: bool = False) -> dict:
+        """Delete a file or directory."""
+        import shutil
+        file_path = self.resolve_path(path)
+        
+        if not file_path.exists():
+            raise FileNotFoundError(f"Path not found: {path}")
+        
+        if file_path.is_dir():
+            if recursive:
+                shutil.rmtree(file_path)
+            else:
+                file_path.rmdir()
+        else:
+            file_path.unlink()
+        
+        return {"success": True, "path": str(path)}
+
+    def move_file(self, source: str, destination: str) -> dict:
+        """Move or rename a file or directory."""
+        import shutil
+        src_path = self.resolve_path(source)
+        dest_path = self.resolve_path(destination)
+        
+        if not src_path.exists():
+            raise FileNotFoundError(f"Source not found: {source}")
+        
+        # Create parent directory of destination if needed
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        shutil.move(str(src_path), str(dest_path))
+        
+        return {"success": True, "from": source, "to": destination}
 
     def __repr__(self):
         return f"<Workspace path={self.path}>"

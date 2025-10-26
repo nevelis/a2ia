@@ -24,18 +24,10 @@ async def client():
 
 
 @pytest.fixture
-def temp_workspace(monkeypatch):
-    """Temporary workspace for testing."""
-    from a2ia.core import clear_workspace
-
-    clear_workspace()
-
-    temp_dir = tempfile.mkdtemp(prefix="a2ia_rest_test_")
-    monkeypatch.setenv("A2IA_WORKSPACE_PATH", temp_dir)
-    yield temp_dir
-
-    clear_workspace()
-    shutil.rmtree(temp_dir, ignore_errors=True)
+def temp_workspace(sandbox_ws):
+    """Temporary workspace for testing (uses sandbox_ws)."""
+    # Just return the sandbox workspace path - all setup is done by sandbox_ws
+    return str(sandbox_ws.path)
 
 
 @pytest.mark.integration
@@ -224,7 +216,7 @@ class TestRESTGit:
         data = response.json()
         assert "success" in data
 
-    async def test_git_workflow(self, client, auth_headers, temp_workspace):
+    async def test_git_workflow(self, client, auth_headers, sandbox_ws):
         """Test complete git workflow."""
         # Create file (JSON format)
         await client.put(

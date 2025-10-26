@@ -27,6 +27,53 @@ def _parse_hunk_header(line: str):
     return old_start, old_count, new_start, new_count
 
 
+def _validate_diff_format(diff: str) -> tuple[bool, str]:
+    """Validate diff format and return (is_valid, error_message)."""
+    lines = diff.splitlines()
+    
+    # Find the first --- and +++ lines
+    from_line = None
+    to_line = None
+    
+    for i, line in enumerate(lines):
+        if line.startswith('---'):
+            from_line = line
+            if i + 1 < len(lines) and lines[i + 1].startswith('+++'):
+                to_line = lines[i + 1]
+                break
+    
+    # Check if headers are present - they are required
+    if from_line is None or to_line is None:
+        return False, "Invalid diff format: missing --- and +++ headers"
+    
+    # Check that prefixes match convention
+    from_path = from_line[4:].strip()
+    to_path = to_line[4:].strip()
+    
+    # Extract prefix type (a/, b/, c/, etc.)
+    from_prefix = ""
+    to_prefix = ""
+    
+    if '/' in from_path:
+        from_prefix = from_path.split('/')[0]
+    if '/' in to_path:
+        to_prefix = to_path.split('/')[0]
+    
+    # Both should have the same prefix style
+    if (from_prefix and not to_prefix) or (not from_prefix and to_prefix):
+        return False, f"Invalid diff format: mismatched prefix style (from: '{from_prefix}', to: '{to_prefix}')"
+    
+    # If both have prefixes, check they follow a/b convention
+    if from_prefix and to_prefix:
+        if from_prefix == to_prefix:
+            return False, f"Invalid diff format: same prefixes ('--- {from_prefix}/' and '+++ {to_prefix}/' should be different)"
+        # Require standard a/b convention
+        if not ((from_prefix == 'a' and to_prefix == 'b') or (from_prefix == 'b' and to_prefix == 'a')):
+            return False, f"Invalid diff format: non-standard prefixes ('--- {from_prefix}/' and '+++ {to_prefix}/' should be 'a' and 'b')"
+    
+    return True, ""
+
+
 @mcp.tool()
 async def patch_file(path: str, diff: str) -> dict:
     """Apply a unified diff deterministically with context verification and EOF insertion alignment."""
@@ -37,6 +84,11 @@ async def patch_file(path: str, diff: str) -> dict:
     log_path = os.path.join(log_dir, 'patch_attempts.log')
 
     try:
+        # Validate diff format first
+        is_valid, error_msg = _validate_diff_format(diff)
+        if not is_valid:
+            return {"success": False, "path": path, "error": error_msg, "stdout": "", "stderr": error_msg}
+        
         diff = _normalize_newlines(diff)
         if not os.path.exists(file_path):
             with open(file_path, 'w', encoding='utf-8') as f:
@@ -162,3 +214,128 @@ async def truncate_file(path: str, length: int = 0) -> dict:
 async def prune_directory(path: str, keep_patterns=None, dry_run: bool = False) -> dict:
     ws = get_workspace()
     return ws.prune_directory(path, keep_patterns, dry_run)
+
+
+@mcp.tool()
+async def list_directory(path: str = "", recursive: bool = False) -> dict:
+    """List files in a directory."""
+    ws = get_workspace()
+    return ws.list_directory(path, recursive)
+
+
+@mcp.tool()
+async def read_file(path: str, encoding: str = "utf-8") -> dict:
+    """Read file content."""
+    ws = get_workspace()
+    content = ws.read_file(path, encoding)
+    return {"content": content, "path": path, "size": len(content.encode(encoding))}
+
+
+@mcp.tool()
+async def write_file(path: str, content: str, encoding: str = "utf-8") -> dict:
+    """Write content to a file."""
+    ws = get_workspace()
+    ws.write_file(path, content, encoding)
+    return {"success": True, "path": path}
+
+
+@mcp.tool()
+async def delete_file(path: str, recursive: bool = False) -> dict:
+    """Delete a file or directory."""
+    ws = get_workspace()
+    return ws.delete_file(path, recursive)
+
+
+@mcp.tool()
+async def move_file(source: str, destination: str) -> dict:
+    """Move or rename a file."""
+    ws = get_workspace()
+    return ws.move_file(source, destination)
+
+
+@mcp.tool()
+async def find_replace(path: str, find_text: str, replace_text: str, encoding: str = "utf-8") -> dict:
+    """Find and replace text in a file."""
+    ws = get_workspace()
+    return ws.find_replace(path, find_text, replace_text, encoding)
+
+
+@mcp.tool()
+async def find_replace_regex(path: str, pattern: str, replace_text: str, encoding: str = "utf-8") -> dict:
+    """Find and replace using regex in a file."""
+    ws = get_workspace()
+    return ws.find_replace_regex(path, pattern, replace_text, encoding)
+
+
+@mcp.tool()
+async def head(path: str, lines: int = 10) -> dict:
+    """Get the first N lines of a file."""
+    ws = get_workspace()
+    file_path = ws.resolve_path(path)
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            file_lines = [line.rstrip('\n') for line in f.readlines()[:lines]]
+        return {"success": True, "path": path, "lines": file_lines, "count": len(file_lines)}
+    except Exception as e:
+        return {"success": False, "path": path, "error": str(e)}
+
+
+@mcp.tool()
+async def tail(path: str, lines: int = 10) -> dict:
+    """Get the last N lines of a file."""
+    ws = get_workspace()
+    file_path = ws.resolve_path(path)
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            file_lines = [line.rstrip('\n') for line in f.readlines()]
+        tail_lines = file_lines[-lines:] if len(file_lines) >= lines else file_lines
+        return {"success": True, "path": path, "lines": tail_lines, "count": len(tail_lines)}
+    except Exception as e:
+        return {"success": False, "path": path, "error": str(e)}
+
+
+@mcp.tool()
+async def grep(pattern: str, path: str, regex: bool = False, recursive: bool = False) -> dict:
+    """Search for pattern in file(s)."""
+    ws = get_workspace()
+    file_path = ws.resolve_path(path)
+    
+    try:
+        import fnmatch
+        from pathlib import Path
+        
+        matches = []
+        count = 0
+        
+        if os.path.isfile(file_path):
+            files_to_search = [file_path]
+        elif os.path.isdir(file_path):
+            if recursive:
+                files_to_search = [f for f in Path(file_path).rglob("*") if f.is_file()]
+            else:
+                files_to_search = [f for f in Path(file_path).glob("*") if f.is_file()]
+        else:
+            return {"success": False, "path": path, "error": "Path not found"}
+        
+        for fpath in files_to_search:
+            with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
+                for line_num, line in enumerate(f, 1):
+                    if regex:
+                        if re.search(pattern, line):
+                            matches.append(f"{fpath}:{line_num}:{line.rstrip()}")
+                            count += 1
+                    else:
+                        if pattern in line:
+                            matches.append(f"{fpath}:{line_num}:{line.rstrip()}")
+                            count += 1
+        
+        return {
+            "success": True,
+            "path": path,
+            "pattern": pattern,
+            "count": count,
+            "matches": matches,
+            "content": "\n".join(matches)
+        }
+    except Exception as e:
+        return {"success": False, "path": path, "error": str(e)}
