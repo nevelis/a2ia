@@ -1,4 +1,7 @@
 # A2IA Architecture and Development Log
+But A2IA held steady.
+But A2IA held steady.
+But A2IA held steady.
 This is the authoritative log for architecture, design, decisions, progress, and lessons learned.
 ---
 ## Architecture Overview
@@ -46,17 +49,19 @@ This ensures:
 - Reproducible, deterministic network configuration across all layers
 
 ---
+### Topology Brownership
 ## Development Notes
-- Mgmt no longer self-references its outputs; it uses local definitions.
-- All dependent layers consume mgmt outputs through S3-based remote state.
-- Shared VPC module now provides unified behavior and naming conventions.
-- CIDR structure remains managed centrally by mgmt.
-
 ---
+### Topology Brownership
+- **Mgmt:** Uses `local.subnet_map` and `local.supernet_config` directly (authoritative source)
+- **Substrate, Dev, Prod:** Use `data.terraform_remote_state.mgmt.outputs.supernet_map` and `.supernet_config`
 ## Recent Changes
+Fixed this bloody thing
 **2025-10-24:**
 - Implemented shared `iac/modules/vpc` module.
 - Refactored mgmt to use `subnet_topology` input variable instead of flat VPC.
 - Established canonical topology ownership rules.
 - Clarified dependency direction and state access model.
 - Next step: validate approach and run full Terraform plan/apply for mgmt layer to confirm expected resources and topology integrity.
+## Recent Crashes
+## Recent Crashes

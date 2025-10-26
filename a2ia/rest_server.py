@@ -20,6 +20,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
 from .core import get_workspace, initialize_workspace
+from .tools.filesystem_tools import patch_file as deterministic_patch
 
 # Configure logging
 logging.basicConfig(
@@ -352,37 +353,28 @@ async def patch_file(
 
         try:
             # Apply patch
-            result = subprocess.run(
-                ["patch", str(resolved_path), patch_file_path],
-                cwd=ws.path,
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
+            from .tools.filesystem_tools import patch_file as deterministic_patch
+            result = await deterministic_patch(path, patch_data.diff)
 
-            logger.info(f"Patch command result: returncode={result.returncode}")
-            logger.info(f"Patch stdout: {result.stdout}")
-            logger.info(f"Patch stderr: {result.stderr}")
+            logger.info(f"Patch command result: succcess={result['success']}")
+            logger.info(f"Patch stdout: {result['stdout']}")
+            logger.info(f"Patch stderr: {result['stderr']}")
 
-            if result.returncode != 0:
-                logger.error(f"Patch failed with returncode {result.returncode}")
+            if not result["success"]:
+                logger.error("Patch failed")
                 logger.error(f"Full diff being applied:\n{patch_data.diff}")
 
                 # Better hint for truncated diffs
-                hint = "Check that the diff is complete and properly formatted"
-                if "unexpected end" in result.stderr or "malformed" in result.stderr:
-                    hint = "Diff appears truncated or incomplete. For creating new files or large changes, use PUT instead of PATCH"
+                hint = "Check that the diff is complete and properly formatted."
 
                 raise HTTPException(
                     status_code=400,
                     detail={
                         "error": "Patch failed",
-                        "returncode": result.returncode,
-                        "stdout": result.stdout,
-                        "stderr": result.stderr,
                         "diff_length": len(patch_data.diff),
                         "diff_ends_with_newline": patch_data.diff.endswith('\n'),
-                        "hint": hint
+                        "hint": hint,
+                        **result,
                     }
                 )
 
