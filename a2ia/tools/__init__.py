@@ -1,13 +1,9 @@
-"""A2IA tools for AI assistants."""
+"""A2IA tools package initialization.
 
-# Import all tools to register them
-from . import (
-    filesystem_tools,  # noqa: F401
-    git_tools,  # noqa: F401
-    git_sdlc_tools,  # noqa: F401
-    memory_tools,  # noqa: F401
-    shell_tools,  # noqa: F401
-    workspace_tools,  # noqa: F401
-    terraform_tools,  # noqa: F401
-    ci_tools,  # noqa: F401
-)
+We avoid eager imports to prevent circular dependencies.
+Tools are registered dynamically by the MCP runtime.
+"""
+
+# Lazy initialization — do not import submodules here to avoid circular import issues.
+
+__all__ = []

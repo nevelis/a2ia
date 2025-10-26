@@ -1,0 +1,62 @@
+# A2IA Architecture and Development Log
+This is the authoritative log for architecture, design, decisions, progress, and lessons learned.
+---
+## Architecture Overview
+The management (mgmt) layer defines and owns the canonical network topology, including VPC supernet, subnet configuration, and routing. This configuration is the single source of truth for all other environments.
+
+The key architectural rule: **dependency flows downward**. The mgmt layer exports its topology through Terraform outputs, and all other environments (substrate, dev, prod) consume these outputs through a `data.terraform_remote_state` data source.
+
+### Dependency Flow Diagram
+```
+        +------------------------+
+        |        mgmt layer      |
+        |  (defines topology)    |
+        +------------------------+
+                     |
+                     v
+        +------------------------+
+        |     substrate layer     |
+        |  (consumes topology)    |
+        +------------------------+
+                     |
+                     v
+        +------------------------+
+        |   prod / dev layers     |
+        |  (consume topology)     |
+        +------------------------+
+```
+
+### VPC Module Design
+All layers use the same reusable VPC module located at `iac/modules/vpc/`. This module is fully topology-driven and accepts the following key inputs:
+- `env`: Environment name (mgmt, substrate, prod, dev)
+- `vpc_cidr`: The CIDR block for the VPC
+- `subnet_topology`: Map of AZs and tiers for subnets
+
+This module creates subnets, route tables, and associations dynamically, ensuring consistency across all environments.
+
+### Topology Ownership
+- **Mgmt:** Uses `local.subnet_map` and `local.supernet_config` directly (authoritative source)
+- **Substrate, Dev, Prod:** Use `data.terraform_remote_state.mgmt.outputs.supernet_map` and `.supernet_config`
+
+### Why This Matters
+This ensures:
+- No circular dependencies
+- Homogeneous topology access
+- Safe separation of concerns
+- Reproducible, deterministic network configuration across all layers
+
+---
+## Development Notes
+- Mgmt no longer self-references its outputs; it uses local definitions.
+- All dependent layers consume mgmt outputs through S3-based remote state.
+- Shared VPC module now provides unified behavior and naming conventions.
+- CIDR structure remains managed centrally by mgmt.
+
+---
+## Recent Changes
+**2025-10-24:**
+- Implemented shared `iac/modules/vpc` module.
+- Refactored mgmt to use `subnet_topology` input variable instead of flat VPC.
+- Established canonical topology ownership rules.
+- Clarified dependency direction and state access model.
+- Next step: validate approach and run full Terraform plan/apply for mgmt layer to confirm expected resources and topology integrity.

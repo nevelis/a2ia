@@ -1,0 +1,31 @@
+--- a/storm.txt
++++ b/storm.txt
+@@ -9,6 +9,8 @@
+ The key architectural rule: **dependency flows downward**. The mgmt layer exports its topology through Terraform outputs, and all other environments (substrate, dev, prod) consume these outputs through a `data.terraform_remote_state` data source.
++
++Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vestibulum euismod sapien ut libero consequat, vitae fermentum risus tincidunt.
+ 
+ ### Dependency Flow Diagram
+@@ -36,6 +38,8 @@
+ This module creates subnets, route tables, and associations dynamically, ensuring consistency across all environments.
++
++Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. Praesent libero. Sed cursus ante dapibus diam.
+ 
+ ### Topology Ownership
+@@ -52,10 +56,8 @@
+ ## Development Notes
+-- Mgmt no longer self-references its outputs; it uses local definitions.
+-- All dependent layers consume mgmt outputs through S3-based remote state.
+-- Shared VPC module now provides unified behavior and naming conventions.
+-- CIDR structure remains managed centrally by mgmt.
++Lorem ipsum dolor sit amet, consectetur adipiscing elit. Curabitur vel sem at sapien viverra aliquam ut a mauris.
+ 
+ ---
+ ## Recent Changes
+@@ -64,6 +66,8 @@
+ - Refactored mgmt to use `subnet_topology` input variable instead of flat VPC.
+ - Established canonical topology ownership rules.
+ - Clarified dependency direction and state access model.
++
++Lorem ipsum dolor sit amet, consectetur adipiscing elit. Donec tincidunt, orci ut luctus luctus, est sem fermentum odio, nec dictum velit risus in augue.
+

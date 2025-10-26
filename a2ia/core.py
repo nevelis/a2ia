@@ -15,7 +15,7 @@ from .workspace import Workspace
 mcp_app = FastMCP("a2ia")
 
 # Single persistent workspace directory (configurable via environment)
-WORKSPACE_PATH = Path(os.getenv("A2IA_WORKSPACE_PATH", "./workspace"))
+WORKSPACE_PATH = Path(os.getenv("A2IA_WORKSPACE_PATH", "."))
 WORKSPACE_PATH.mkdir(parents=True, exist_ok=True)
 
 # Single global workspace (auto-initialized)
