@@ -226,3 +226,183 @@ async def git_blame(path: str) -> dict:
     result = _run_git_command(["blame", path])
     return result
 
+
+
+# Enhanced Git actions for meta-command
+
+@mcp.tool()
+async def git_branch_create(name: str, from_branch: str | None = None) -> dict:
+    """Create new branch.
+
+    Args:
+        name: Branch name
+        from_branch: Create from this branch (default: current)
+
+    Returns:
+        Dictionary with result
+    """
+    args = ["checkout", "-b", name]
+    if from_branch:
+        args.append(from_branch)
+
+    result = _run_git_command(args)
+    result["branch"] = name
+    return result
+
+
+@mcp.tool()
+async def git_list_branches(all_branches: bool = False) -> dict:
+    """List branches.
+
+    Args:
+        all_branches: Include remote branches (default: False)
+
+    Returns:
+        Dictionary with branches list
+    """
+    args = ["branch"]
+    if all_branches:
+        args.append("-a")
+
+    result = _run_git_command(args)
+
+    # Parse branch list
+    branches = []
+    current = None
+    if result["success"]:
+        for line in result["stdout"].split('\n'):
+            if line.strip():
+                if line.startswith('*'):
+                    current = line[2:].strip()
+                    branches.append(current)
+                else:
+                    branches.append(line.strip())
+
+    result["branches"] = branches
+    result["current"] = current
+    return result
+
+
+@mcp.tool()
+async def git_push(remote: str = "origin", branch: str | None = None, force_with_lease: bool = False) -> dict:
+    """Push to remote safely.
+
+    Args:
+        remote: Remote name (default: origin)
+        branch: Branch to push (default: current)
+        force_with_lease: Safe force push (default: False)
+
+    Returns:
+        Dictionary with push result
+    """
+    import subprocess
+    import os
+
+    ws = get_workspace()
+
+    # Get current branch if not specified
+    if not branch:
+        branch_result = subprocess.run(
+            ["git", "branch", "--show-current"],
+            cwd=ws.path,
+            capture_output=True,
+            text=True,
+            env={**os.environ, 'GIT_TERMINAL_PROMPT': '0'}
+        )
+        branch = branch_result.stdout.strip()
+
+    args = ["push", remote, branch]
+
+    if force_with_lease:
+        args.append("--force-with-lease")
+
+    result = _run_git_command(args)
+    result["remote"] = remote
+    result["branch"] = branch
+    return result
+
+
+@mcp.tool()
+async def git_pull(remote: str = "origin", branch: str = "main") -> dict:
+    """Pull from remote with rebase (no merge).
+
+    Args:
+        remote: Remote name (default: origin)
+        branch: Branch to pull (default: main)
+
+    Returns:
+        Dictionary with pull result
+    """
+    result = _run_git_command(["pull", "--rebase", remote, branch])
+    result["remote"] = remote
+    result["branch"] = branch
+    return result
+
+
+@mcp.tool()
+async def git_show(commit: str = "HEAD", summarize: bool = False) -> dict:
+    """Show commit details.
+
+    Args:
+        commit: Commit hash or ref (default: HEAD)
+        summarize: Show summary only (no full diff)
+
+    Returns:
+        Dictionary with commit info
+    """
+    if summarize:
+        # Get structured summary
+        args = ["show", "--stat", "--format=%H%n%an%n%ae%n%at%n%s", commit]
+    else:
+        args = ["show", commit]
+
+    result = _run_git_command(args)
+
+    if summarize and result["success"]:
+        # Parse structured output
+        lines = result["stdout"].split('\n')
+        if len(lines) >= 5:
+            result["summary"] = {
+                "commit_hash": lines[0],
+                "author": lines[1],
+                "author_email": lines[2],
+                "timestamp": lines[3],
+                "message": lines[4],
+                "stats": '\n'.join(lines[5:])
+            }
+
+    return result
+
+
+@mcp.tool()
+async def git_stash(subaction: str, name: str | None = None, message: str | None = None) -> dict:
+    """Stash operations.
+
+    Args:
+        subaction: Action (push, pop, list, apply, drop)
+        name: Stash name for push (optional)
+        message: Stash message (optional)
+
+    Returns:
+        Dictionary with stash result
+    """
+    args = ["stash", subaction]
+
+    if subaction == "push":
+        if message:
+            args.extend(["-m", message])
+        elif name:
+            args.extend(["-m", name])
+
+    elif subaction in ["pop", "apply", "drop"]:
+        if name:
+            args.append(name)
+
+    result = _run_git_command(args)
+
+    # Parse stash list
+    if subaction == "list" and result["success"]:
+        stashes = [line.strip() for line in result["stdout"].split('\n') if line.strip()]
+        result["stashes"] = stashes
+
+    return result

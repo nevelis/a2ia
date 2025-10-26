@@ -550,13 +550,22 @@ async def execute_command(
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {str(e)}") from e
 
 
+class ExecTurkRequest(BaseModel):
+    """Request for ExecuteTurk with longer default timeout."""
+    command: str = Field(description="Shell command to execute")
+    timeout: int = Field(default=300, description="Timeout in seconds (default: 5 minutes)")
+    cwd: str | None = Field(None, description="Working directory (relative to workspace)")
+    env: dict | None = Field(None, description="Additional environment variables")
+
+
 @app.post("/workspace/exec-turk", tags=["Shell"], operation_id="ExecuteTurk")
 async def execute_turk(
-    exec_data: ExecRequest, authenticated: bool = Depends(verify_token)
+    exec_data: ExecTurkRequest, authenticated: bool = Depends(verify_token)
 ):
     """Execute shell command with human operator oversight.
 
     Similar to ExecuteCommand but with human curation for safety.
+    Default timeout is 5 minutes (vs 30s for ExecuteCommand).
     """
     from .tools.shell_tools import execute_turk as exec_turk
     try:
@@ -874,13 +883,19 @@ class GitRequest(BaseModel):
     - tag_epoch: Tag as epoch-n-final (params: epoch_number, message)
     - cherry_pick: Cherry-pick commit (params: commit_hash)
     - sync: Fetch and rebase from remote (params: remote)
+    - create_branch: Create new branch (params: branch, from_branch)
+    - list_branches: List all branches (params: all_branches)
+    - push: Push to remote safely (params: remote, branch, force_with_lease)
+    - pull: Pull with rebase (params: remote, branch)
+    - show: Show commit details (params: commit, summarize)
+    - stash_push/pop/list/apply/drop: Stash operations (params: name, message)
     """
     action: str = Field(description="Git action to perform")
     path: str | None = Field(None, description="File path for diff/blame")
     staged: bool | None = Field(None, description="Show staged changes (diff)")
     message: str | None = Field(None, description="Commit/tag/squash message")
     limit: int | None = Field(None, description="Number of log entries")
-    commit: str | None = Field(None, description="Commit hash for reset")
+    commit: str | None = Field(None, description="Commit hash for reset/show")
     hard: bool | None = Field(None, description="Hard reset (reset)")
     branch_or_commit: str | None = Field(None, description="Branch/commit for checkout")
     create_new: bool | None = Field(None, description="Create new branch (checkout)")
@@ -888,9 +903,14 @@ class GitRequest(BaseModel):
     descriptor: str | None = Field(None, description="Branch descriptor")
     remote: str | None = Field(None, description="Remote name (default: origin)")
     force: bool | None = Field(None, description="Force operation")
+    force_with_lease: bool | None = Field(None, description="Safe force push")
     branch: str | None = Field(None, description="Branch name")
+    from_branch: str | None = Field(None, description="Create branch from")
+    all_branches: bool | None = Field(None, description="Include remote branches")
     epoch_number: int | None = Field(None, description="Epoch number for tagging")
     commit_hash: str | None = Field(None, description="Commit to cherry-pick")
+    summarize: bool | None = Field(None, description="Show summary only (show)")
+    name: str | None = Field(None, description="Stash name")
 
 
 @app.post("/git", tags=["Git"], operation_id="Git")
@@ -957,6 +977,28 @@ async def git_operation(
             return await git_sdlc_tools.git_cherry_pick_phase(git_req.commit_hash)
         elif action == "sync":
             return await git_sdlc_tools.workspace_sync(git_req.remote or "origin")
+        elif action == "create_branch":
+            if not git_req.branch:
+                raise ValueError("branch required for create_branch")
+            return await git_tools.git_branch_create(git_req.branch)
+        elif action == "list_branches":
+            return await git_tools.git_list_branches(git_req.all_branches or False)
+        elif action == "push":
+            return await git_tools.git_push(
+                git_req.remote or "origin",
+                git_req.branch,
+                git_req.force_with_lease or False
+            )
+        elif action == "pull":
+            return await git_tools.git_pull(
+                git_req.remote or "origin",
+                git_req.branch or "main"
+            )
+        elif action == "show":
+            return await git_tools.git_show(git_req.commit or "HEAD", git_req.summarize or False)
+        elif action in ["stash_push", "stash_pop", "stash_list", "stash_apply", "stash_drop"]:
+            subaction = action.replace("stash_", "")
+            return await git_tools.git_stash(subaction, git_req.name, git_req.message)
         else:
             raise ValueError(f"Unknown git action: {action}")
 

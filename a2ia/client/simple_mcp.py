@@ -89,6 +89,12 @@ class SimpleMCPClient:
             "git_restore": git_tools.git_restore,
             "git_blame": git_tools.git_blame,
             "git_checkout": git_tools.git_checkout,
+            "git_branch_create": git_tools.git_branch_create,
+            "git_list_branches": git_tools.git_list_branches,
+            "git_push": git_tools.git_push,
+            "git_pull": git_tools.git_pull,
+            "git_show": git_tools.git_show,
+            "git_stash": git_tools.git_stash,
             # Git SDLC
             "git_create_epoch_branch": git_sdlc_tools.git_create_epoch_branch,
             "git_rebase_main": git_sdlc_tools.git_rebase_main,
@@ -168,6 +174,12 @@ class SimpleMCPClient:
             {"type": "function", "function": {"name": "GitReset", "description": "Reset to previous commit", "parameters": {"type": "object", "properties": {"commit": {"type": "string"}, "hard": {"type": "boolean"}}}}},
             {"type": "function", "function": {"name": "GitBlame", "description": "Show who changed each line", "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}},
             {"type": "function", "function": {"name": "GitCheckout", "description": "Switch branch or commit", "parameters": {"type": "object", "properties": {"branch_or_commit": {"type": "string"}, "create_new": {"type": "boolean"}}, "required": ["branch_or_commit"]}}},
+            {"type": "function", "function": {"name": "GitBranchCreate", "description": "Create new branch", "parameters": {"type": "object", "properties": {"name": {"type": "string"}, "from_branch": {"type": "string"}}, "required": ["name"]}}},
+            {"type": "function", "function": {"name": "GitListBranches", "description": "List all branches", "parameters": {"type": "object", "properties": {"all_branches": {"type": "boolean"}}}}},
+            {"type": "function", "function": {"name": "GitPush", "description": "Push to remote safely", "parameters": {"type": "object", "properties": {"remote": {"type": "string"}, "branch": {"type": "string"}, "force_with_lease": {"type": "boolean"}}}}},
+            {"type": "function", "function": {"name": "GitPull", "description": "Pull with rebase", "parameters": {"type": "object", "properties": {"remote": {"type": "string"}, "branch": {"type": "string"}}}}},
+            {"type": "function", "function": {"name": "GitShow", "description": "Show commit details", "parameters": {"type": "object", "properties": {"commit": {"type": "string"}, "summarize": {"type": "boolean"}}}}},
+            {"type": "function", "function": {"name": "GitStash", "description": "Stash operations", "parameters": {"type": "object", "properties": {"subaction": {"type": "string"}, "name": {"type": "string"}, "message": {"type": "string"}}, "required": ["subaction"]}}},
         ])
 
         # Git SDLC tools (TitleCase names)
