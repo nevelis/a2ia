@@ -1,7 +1,8 @@
 """LLM client for Ollama integration."""
 
 import httpx
-from typing import List, Dict, Any, Optional
+import json
+from typing import List, Dict, Any, Optional, AsyncIterator
 
 
 class OllamaClient:
@@ -73,6 +74,63 @@ class OllamaClient:
                 print(f"\n⚠️  Response debug:")
                 print(f"   Data: {data}")
                 print(f"   Message: {data.get('message')}")
+                raise
+
+    async def stream_chat(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: Optional[List[Dict[str, Any]]] = None,
+        temperature: float = 0.7
+    ) -> AsyncIterator[Dict[str, Any]]:
+        """Send streaming chat request to Ollama.
+
+        Args:
+            messages: List of message dicts with role and content
+            tools: Optional list of tool definitions (OpenAI format)
+            temperature: Sampling temperature (default: 0.7)
+
+        Yields:
+            Chunks of the response as they arrive. Each chunk is a dict that may contain:
+            - 'message': Partial message with 'content' and/or 'tool_calls'
+            - 'done': Boolean indicating if this is the final chunk
+        """
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "stream": True,
+            "options": {
+                "temperature": temperature
+            }
+        }
+
+        if tools:
+            payload["tools"] = tools
+
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            try:
+                async with client.stream(
+                    "POST",
+                    f"{self.base_url}/api/chat",
+                    json=payload
+                ) as response:
+                    response.raise_for_status()
+                    
+                    async for line in response.aiter_lines():
+                        if line.strip():
+                            try:
+                                chunk = json.loads(line)
+                                yield chunk
+                            except json.JSONDecodeError:
+                                # Skip invalid JSON lines
+                                continue
+
+            except httpx.HTTPStatusError as e:
+                print(f"\n❌ Ollama rejected streaming request:")
+                print(f"   Status: {e.response.status_code}")
+                print(f"   Response: {e.response.text[:500]}")
+                raise
+            except Exception as e:
+                print(f"\n⚠️  Streaming error: {e}")
                 raise
 
     async def list_models(self) -> List[str]:

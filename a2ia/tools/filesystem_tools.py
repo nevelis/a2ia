@@ -295,8 +295,19 @@ async def tail(path: str, lines: int = 10) -> dict:
 
 
 @mcp.tool()
-async def grep(pattern: str, path: str, regex: bool = False, recursive: bool = False) -> dict:
-    """Search for pattern in file(s)."""
+async def grep(pattern: str, path: str, regex: bool = False, recursive: bool = False, ignore_case: bool = False) -> dict:
+    """Search for pattern in file(s).
+    
+    Args:
+        pattern: Search pattern
+        path: File or directory path
+        regex: Use regex pattern matching (default: False)
+        recursive: Search recursively in directories (default: False)
+        ignore_case: Case-insensitive search (default: False)
+    
+    Returns:
+        Dictionary with search results
+    """
     ws = get_workspace()
     file_path = ws.resolve_path(path)
     
@@ -306,6 +317,16 @@ async def grep(pattern: str, path: str, regex: bool = False, recursive: bool = F
         
         matches = []
         count = 0
+        
+        # Prepare pattern for case-insensitive matching
+        if ignore_case and not regex:
+            pattern_lower = pattern.lower()
+        elif ignore_case and regex:
+            # Add case-insensitive flag to regex
+            import re as regex_module
+            regex_flags = regex_module.IGNORECASE
+        else:
+            regex_flags = 0
         
         if os.path.isfile(file_path):
             files_to_search = [file_path]
@@ -321,11 +342,14 @@ async def grep(pattern: str, path: str, regex: bool = False, recursive: bool = F
             with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
                 for line_num, line in enumerate(f, 1):
                     if regex:
-                        if re.search(pattern, line):
+                        if re.search(pattern, line, regex_flags if ignore_case else 0):
                             matches.append(f"{fpath}:{line_num}:{line.rstrip()}")
                             count += 1
                     else:
-                        if pattern in line:
+                        # Simple string matching
+                        search_line = line.lower() if ignore_case else line
+                        search_pattern = pattern_lower if ignore_case else pattern
+                        if search_pattern in search_line:
                             matches.append(f"{fpath}:{line_num}:{line.rstrip()}")
                             count += 1
         
