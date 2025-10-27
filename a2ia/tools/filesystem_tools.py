@@ -3,6 +3,7 @@
 from ..core import get_mcp_app, get_workspace
 import os
 import re
+import shutil
 import tempfile
 import time
 
@@ -178,7 +179,9 @@ async def patch_file(path: str, diff: str) -> dict:
             tmp.write(new_content)
             tmp_path = tmp.name
 
-        os.replace(tmp_path, file_path)
+        # Use shutil.move() instead of os.replace() to handle cross-device moves
+        # When temp file is on different filesystem (e.g., /tmp), os.replace() fails
+        shutil.move(tmp_path, file_path)
 
         with open(log_path, 'a', encoding='utf-8') as log:
             log.write(

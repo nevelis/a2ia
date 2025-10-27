@@ -2,7 +2,7 @@
 
 import json
 from typing import List, Dict, Any, Optional, AsyncIterator
-from .llm import OllamaClient
+from .llm_base import LLMClient
 from .mcp import MCPClient
 from .tool_validator import ToolValidator
 from .react_parser import ReActParser, parse_react_response, format_observation
@@ -75,11 +75,11 @@ def format_tool_result(result: Any) -> str:
 class Orchestrator:
     """Orchestrates conversation between user, LLM, and MCP tools."""
 
-    def __init__(self, llm_client: OllamaClient, mcp_client: MCPClient, use_react: bool = False):
+    def __init__(self, llm_client: LLMClient, mcp_client: MCPClient, use_react: bool = False):
         """Initialize orchestrator.
 
         Args:
-            llm_client: Ollama LLM client
+            llm_client: LLM client (Ollama, vLLM, etc.)
             mcp_client: MCP client for tools
             use_react: Use ReAct (Reasoning + Acting) mode (default: True)
         """

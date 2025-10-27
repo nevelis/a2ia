@@ -167,5 +167,6 @@ def format_react_prompt(tools: list) -> str:
                 param_desc = param_info.get('description', '')
                 tools_text += f"  - {param_name} ({param_type}): {param_desc}\n"
     
-    return REACT_SYSTEM_PROMPT.format(tools_list=tools_text)
+    # Use replace instead of format to avoid KeyError from braces in tool descriptions
+    return REACT_SYSTEM_PROMPT.replace("{tools_list}", tools_text)
 

@@ -15,17 +15,40 @@ class Workspace:
         return cls(path)
 
     def resolve_path(self, path: str | Path) -> Path:
+        """Resolve a path relative to the workspace root.
+        
+        Handles three cases:
+        1. Absolute paths within workspace: /full/workspace/path/file.txt → return as-is
+        2. Workspace-relative paths: /file.txt → workspace/file.txt
+        3. Regular relative paths: file.txt → workspace/file.txt
+        
+        This ensures the LLM can't escape the workspace while handling all path formats.
+        """
         p = Path(path)
+        
+        # If path is absolute
         if p.is_absolute():
-            return p
+            # Check if it's already within the workspace
+            try:
+                # If path is within workspace, return it as-is
+                p.relative_to(self.path)
+                return p
+            except ValueError:
+                # Path is absolute but not within workspace
+                # Strip leading '/' and treat as workspace-relative
+                path_str = str(path).lstrip('/')
+                return self.path / path_str
+        
+        # Relative path - resolve against workspace
         return self.path / p
 
     def list_directory(self, path: str = "", recursive: bool = False):
+        """List files in a directory, returning workspace-relative paths."""
         target = self.resolve_path(path)
         if recursive:
-            files = [str(p) for p in target.rglob("*") if p.is_file()]
+            files = [str(p.relative_to(self.path)) for p in target.rglob("*") if p.is_file()]
         else:
-            files = [str(p) for p in target.glob("*") if p.is_file()]
+            files = [str(p.relative_to(self.path)) for p in target.glob("*") if p.is_file()]
         return {"success": True, "files": files}
 
     def read_file(self, path: str, encoding: str = "utf-8") -> str:

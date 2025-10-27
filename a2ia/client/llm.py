@@ -3,9 +3,10 @@
 import httpx
 import json
 from typing import List, Dict, Any, Optional, AsyncIterator
+from .llm_base import LLMClient
 
 
-class OllamaClient:
+class OllamaClient(LLMClient):
     """Client for interacting with Ollama LLM."""
 
     def __init__(

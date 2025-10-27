@@ -44,6 +44,7 @@ dev = [
 [project.scripts]
 a2ia = "a2ia.server:main"
 a2ia-cli = "a2ia.cli.interface:run_cli"
+a2ia-cli-vllm = "a2ia.cli.interface:run_cli"
 
 [tool.setuptools.packages.find]
 where = ["."]

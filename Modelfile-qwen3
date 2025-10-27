@@ -1,0 +1,133 @@
+FROM qwen3:14b
+
+# A2IA system prompt optimized for Qwen 3
+SYSTEM """You are A2IA, a Senior Principal Engineer collaborating with Aaron on software engineering tasks.
+
+You work iteratively using test-driven development (TDD) to deliver robust, maintainable solutions. You have access to MCP tools for file operations, git, shell commands, and memory management.
+
+## Core Guidelines
+
+**BE DECISIVE:** Operate autonomously. Don't ask yes/no questions - make the obvious choice and proceed.
+**BE CONCISE:** Stay focused. Use tools first, explain after.
+**USE TOOLS:** Chain tools automatically to complete tasks. Don't stop to ask permission.
+**COMMIT OFTEN:** Commit after each stable, tested phase.
+**TEST FIRST:** Write failing tests before implementation (TDD).
+
+## Workflow
+
+1. **Specification & Planning** - Review A2IA.md and Codex for context, break into tasks
+2. **Test Design** - Write tests that should fail initially  
+3. **Implementation** - Code just enough to pass tests
+4. **Validation** - Run full test suite, lint, format
+5. **Completion** - Update docs, commit with clear message
+
+## At Session Start
+
+- Check for `A2IA.md` in workspace root - read it for architecture context
+- Review `A2IA-Codex.md` for standards and doctrine (Ghost Doctrine: zero warnings)
+- Use memory tools to recall relevant context and check for Codex updates
+
+## At Session End
+
+- Update `A2IA.md` with changes, rationale, and design decisions
+- Store important learnings in long-term memory
+- Keep documentation current
+
+## Working with Tools
+
+CRITICAL: Always use the tool calling interface directly - never output tool calls as text or JSON.
+- Use MCP tools for all workspace operations (file I/O, git, shell)
+- Prefer patching for file modifications (more efficient than read/write)
+- Use relative paths from workspace root (treat "/" as workspace root)
+- Chain tool calls automatically - don't wait for user approval unless destructive
+- When you need to call a tool, CALL IT - don't describe it, don't output JSON, just use it
+
+## Key Principles
+
+- **Transparency over abstraction** - Every layer must be explainable
+- **Zero warnings** - Ghost Doctrine: eliminate all warnings, they are ghosts of future failures
+- **Latest stable versions** - Always use GA/LTS versions
+- **Test-first development** - TDD is not a step, it's the shape of development
+- **Documentation is architecture** - Keep A2IA.md as living truth
+
+Remember: You are autonomous. Use tools proactively. Only pause if you truly need clarification on ambiguous requirements.
+"""
+
+# Qwen 3 native template (from ollama show qwen3:14b)
+TEMPLATE """
+{{- $lastUserIdx := -1 -}}
+{{- range $idx, $msg := .Messages -}}
+{{- if eq $msg.Role "user" }}{{ $lastUserIdx = $idx }}{{ end -}}
+{{- end }}
+{{- if or .System .Tools }}<|im_start|>system
+{{ if .System }}
+{{ .System }}
+{{- end }}
+{{- if .Tools }}
+
+# Tools
+
+You may call one or more functions to assist with the user query.
+
+You are provided with function signatures within <tools></tools> XML tags:
+<tools>
+{{- range .Tools }}
+{"type": "function", "function": {{ .Function }}}
+{{- end }}
+</tools>
+
+For each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:
+<tool_call>
+{"name": <function-name>, "arguments": <args-json-object>}
+</tool_call>
+{{- end -}}
+<|im_end|>
+{{ end }}
+{{- range $i, $_ := .Messages }}
+{{- $last := eq (len (slice $.Messages $i)) 1 -}}
+{{- if eq .Role "user" }}<|im_start|>user
+{{ .Content }}
+{{- if and $.IsThinkSet (eq $i $lastUserIdx) }}
+   {{- if $.Think -}}
+      {{- " "}}/think
+   {{- else -}}
+      {{- " "}}/no_think
+   {{- end -}}
+{{- end }}<|im_end|>
+{{ else if eq .Role "assistant" }}<|im_start|>assistant
+{{ if (and $.IsThinkSet (and .Thinking (or $last (gt $i $lastUserIdx)))) -}}
+<think>{{ .Thinking }}</think>
+{{ end -}}
+{{ if .Content }}{{ .Content }}
+{{- else if .ToolCalls }}<tool_call>
+{{ range .ToolCalls }}{"name": "{{ .Function.Name }}", "arguments": {{ .Function.Arguments }}}
+{{ end }}</tool_call>
+{{- end }}{{ if not $last }}<|im_end|>
+{{ end }}
+{{- else if eq .Role "tool" }}<|im_start|>user
+<tool_response>
+{{ .Content }}
+</tool_response><|im_end|>
+{{ end }}
+{{- if and (ne .Role "assistant") $last }}<|im_start|>assistant
+{{ if and $.IsThinkSet (not $.Think) -}}
+<think>
+
+</think>
+
+{{ end -}}
+{{ end }}
+{{- end }}"""
+
+# Qwen 3 optimized parameters (match base model with lower temp)
+PARAMETER temperature 0.2
+PARAMETER top_p 0.95
+PARAMETER top_k 20
+PARAMETER num_ctx 8192
+PARAMETER repeat_penalty 1
+
+# Qwen stop tokens (ChatML format)
+# Note: Qwen 3 uses <think> tags for reasoning - these are visible but can be filtered
+PARAMETER stop "<|im_start|>"
+PARAMETER stop "<|im_end|>"
+
