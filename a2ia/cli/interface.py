@@ -52,63 +52,73 @@ from ..client.orchestrator import Orchestrator
 # Suppress httpx logging noise
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
-# Tool emoji mapping
+# Tool emoji mapping (keys are TitleCase as returned by LLM)
 TOOL_EMOJIS = {
     # File operations
-    "read_file": "📄",
-    "write_file": "✍️",
-    "append_file": "➕",
-    "patch_file": "🔧",
-    "list_directory": "📁",
-    "delete_file": "🗑️",
-    "copy_file": "📋",
-    "move_file": "➡️",
-    "create_directory": "📂",
-    "prune_directory": "🧹",
+    "ReadFile": "📄",
+    "WriteFile": "✍️",
+    "AppendFile": "➕",
+    "PatchFile": "🔧",
+    "ListDirectory": "📁",
+    "DeleteFile": "🗑️",
+    "CopyFile": "📋",
+    "MoveFile": "➡️",
+    "CreateDirectory": "📂",
+    "PruneDirectory": "🧹",
+    "FindReplace": "🔄",
+    "FindReplaceRegex": "🔄",
+    "TruncateFile": "✂️",
+    "Head": "⬆️",
+    "Tail": "⬇️",
+    "Grep": "🔍",
     
     # Git operations
-    "git_status": "🌿",
-    "git_diff": "📊",
-    "git_add": "➕",
-    "git_commit": "💾",
-    "git_push": "☁️",
-    "git_pull": "⬇️",
-    "git_branch": "🌱",
-    "git_checkout": "🔀",
-    "git_merge": "🔀",
-    "git_log": "📜",
-    "git_restore": "⏪",
-    "git_reset": "↩️",
+    "GitStatus": "🌿",
+    "GitDiff": "📊",
+    "GitAdd": "➕",
+    "GitCommit": "💾",
+    "GitPush": "☁️",
+    "GitPull": "⬇️",
+    "GitBranch": "🌱",
+    "GitBranchCreate": "🌱",
+    "GitListBranches": "🌱",
+    "GitCheckout": "🔀",
+    "GitMerge": "🔀",
+    "GitLog": "📜",
+    "GitRestore": "⏪",
+    "GitReset": "↩️",
+    "GitBlame": "👁️",
+    "GitCreateEpochBranch": "🌱",
     
     # Memory operations
-    "store_memory": "🧠",
-    "recall_memory": "🔍",
-    "list_memories": "📚",
-    "delete_memory": "🧹",
-    "search_memory": "🔎",
+    "StoreMemory": "🧠",
+    "RecallMemory": "🔍",
+    "ListMemories": "📚",
+    "DeleteMemory": "🧹",
+    "SearchMemory": "🔎",
     
     # Execution
-    "execute_command": "⚙️",
-    "execute_turk": "👷",
-    
-    # Search/Grep
-    "grep": "🔍",
-    "find_files": "🔎",
+    "ExecuteCommand": "⚙️",
+    "ExecuteTurk": "👷",
+    "TurkInfo": "ℹ️",
+    "TurkReset": "🔄",
     
     # Terraform
-    "terraform_init": "🏗️",
-    "terraform_plan": "📋",
-    "terraform_apply": "🚀",
-    "terraform_destroy": "💥",
-    "terraform_validate": "✅",
+    "TerraformInit": "🏗️",
+    "TerraformPlan": "📋",
+    "TerraformApply": "🚀",
+    "TerraformDestroy": "💥",
+    "TerraformValidate": "✅",
+    "TerraformWorkspace": "📁",
+    "TerraformImport": "📥",
     
     # Build/CI
-    "make": "🔨",
-    "run_tests": "🧪",
+    "Make": "🔨",
+    "RunTests": "🧪",
     
     # Workspace
-    "get_workspace_info": "ℹ️",
-    "create_workspace": "📦",
+    "GetWorkspaceInfo": "ℹ️",
+    "CreateWorkspace": "📦",
 }
 
 
@@ -181,7 +191,8 @@ class CLI:
         show_thinking: bool = False,
         use_react: bool = False,
         backend: str = "ollama",
-        vllm_url: str = "http://localhost:8000/v1"
+        vllm_url: str = "http://localhost:8000/v1",
+        enable_tools: bool = True
     ):
         """Initialize CLI.
 
@@ -193,12 +204,14 @@ class CLI:
             use_react: Use ReAct (Reasoning + Acting) mode (experimental)
             backend: LLM backend to use: 'ollama' or 'vllm' (default: ollama)
             vllm_url: vLLM server URL (only used if backend='vllm')
+            enable_tools: Enable tool calling (default: True, disable for models without tool support)
         """
         self.model = model
         self.backend = backend
         self.mcp_command = mcp_command or ["python3", "-m", "a2ia.server", "--mode", "mcp"]
         self.debug = debug
         self.show_thinking = show_thinking
+        self.enable_tools = enable_tools
 
         # Initialize LLM client based on backend
         if backend == "vllm":
@@ -428,7 +441,7 @@ class CLI:
             if self.orchestrator.use_react:
                 stream = self.orchestrator.process_turn_react_streaming()
             else:
-                stream = self.orchestrator.process_turn_streaming()
+                stream = self.orchestrator.process_turn_streaming(enable_tools=self.enable_tools)
             
             # Create tasks for stream consumption and interrupt monitoring
             stream_task = asyncio.create_task(self._consume_stream(stream, thinking, state_dict))
@@ -503,12 +516,13 @@ async def main():
     import argparse
 
     parser = argparse.ArgumentParser(description="A2IA CLI")
-    parser.add_argument("--model", default="a2ia-qwen", help="Model name (Ollama model or vLLM model path)")
+    parser.add_argument("--model", default="capybara-sdlc:latest", help="Model name (Ollama model or vLLM model path)")
     parser.add_argument("--backend", default="ollama", choices=["ollama", "vllm"], help="LLM backend to use (default: ollama)")
     parser.add_argument("--vllm-url", default="http://localhost:8000/v1", help="vLLM server URL (only used with --backend=vllm)")
     parser.add_argument("--debug", action="store_true", help="Enable debug output")
     parser.add_argument("--show-thinking", action="store_true", help="Show LLM reasoning before actions")
     parser.add_argument("--react", action="store_true", help="Use ReAct mode (experimental, requires model fine-tuning)")
+    parser.add_argument("--no-tools", action="store_true", help="Disable tool calling (for models without tool support)")
     args = parser.parse_args()
 
     cli = CLI(
@@ -517,7 +531,8 @@ async def main():
         vllm_url=args.vllm_url,
         debug=args.debug, 
         show_thinking=args.show_thinking, 
-        use_react=args.react
+        use_react=args.react,
+        enable_tools=not args.no_tools
     )
     await cli.start()
 

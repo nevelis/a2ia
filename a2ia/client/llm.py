@@ -11,13 +11,13 @@ class OllamaClient(LLMClient):
 
     def __init__(
         self,
-        model: str = "qwen2.5:latest",
+        model: str = "capybara-sdlc:latest",
         base_url: str = "http://localhost:11434"
     ):
         """Initialize Ollama client.
 
         Args:
-            model: Ollama model name (default: qwen2.5:latest)
+            model: Ollama model name (default: capybara-sdlc:latest)
             base_url: Ollama server URL (default: http://localhost:11434)
         """
         self.model = model
@@ -128,7 +128,12 @@ class OllamaClient(LLMClient):
             except httpx.HTTPStatusError as e:
                 print(f"\n❌ Ollama rejected streaming request:")
                 print(f"   Status: {e.response.status_code}")
-                print(f"   Response: {e.response.text[:500]}")
+                # Can't access .text on streaming response after it's consumed
+                try:
+                    error_text = await e.response.aread()
+                    print(f"   Response: {error_text.decode()[:500]}")
+                except:
+                    print(f"   (Unable to read response body)")
                 raise
             except Exception as e:
                 print(f"\n⚠️  Streaming error: {e}")
