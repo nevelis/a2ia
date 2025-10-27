@@ -132,7 +132,8 @@ class CLI:
         model: str = "a2ia-qwen",
         mcp_command: Optional[list] = None,
         debug: bool = False,
-        show_thinking: bool = False
+        show_thinking: bool = False,
+        use_react: bool = False
     ):
         """Initialize CLI.
 
@@ -141,6 +142,7 @@ class CLI:
             mcp_command: MCP server command (default: local A2IA server)
             debug: Enable debug output showing message history
             show_thinking: Show LLM thinking/reasoning before actions
+            use_react: Use ReAct (Reasoning + Acting) mode (experimental)
         """
         self.model = model
         self.mcp_command = mcp_command or ["python3", "-m", "a2ia.server", "--mode", "mcp"]
@@ -149,7 +151,7 @@ class CLI:
 
         self.llm_client = OllamaClient(model=model)
         self.mcp_client = SimpleMCPClient(server_command=self.mcp_command)
-        self.orchestrator = Orchestrator(self.llm_client, self.mcp_client)
+        self.orchestrator = Orchestrator(self.llm_client, self.mcp_client, use_react=use_react)
 
         self.session = PromptSession()
         self.style = Style.from_dict({
@@ -230,14 +232,20 @@ class CLI:
                 thinking = ThinkingAnimation()
                 thinking.start()
                 
-                # Track if we've printed A2IA: label yet
+                # Track state
                 has_printed_label = False
                 has_content = False
                 after_tool = False
-                thinking_buffer = []  # Buffer first few chunks to detect tool calls
+                in_thought = False
                 
                 try:
-                    async for chunk in self.orchestrator.process_turn_streaming():
+                    # Use ReAct streaming if enabled
+                    if self.orchestrator.use_react:
+                        stream = self.orchestrator.process_turn_react_streaming()
+                    else:
+                        stream = self.orchestrator.process_turn_streaming()
+                    
+                    async for chunk in stream:
                         chunk_type = chunk.get('type')
                         
                         if chunk_type == 'content':
@@ -302,6 +310,49 @@ class CLI:
                             # Show validation warning
                             print(f"   ⚠️  {chunk['message']}")
                         
+                        elif chunk_type == 'thought':
+                            # ReAct: Show thinking
+                            if not in_thought:
+                                await thinking.stop()
+                                print(f"\n\033[90m💭 {chunk['text']}\033[0m", end='', flush=True)
+                                in_thought = True
+                            else:
+                                print(chunk['text'], end='', flush=True)
+                        
+                        elif chunk_type == 'action_start':
+                            # ReAct: Tool call starting
+                            if in_thought:
+                                print()  # End thought line
+                                in_thought = False
+                            
+                            tool_name = chunk['action']
+                            emoji = get_tool_emoji(tool_name)
+                            args = chunk['args']
+                            
+                            # Format args concisely
+                            if args:
+                                formatted_args = {}
+                                for k, v in args.items():
+                                    if isinstance(v, str) and len(v) > 50:
+                                        formatted_args[k] = v[:50] + "..."
+                                    else:
+                                        formatted_args[k] = v
+                                args_str = ", ".join(f"{k}={repr(v)}" for k, v in formatted_args.items())
+                                print(f"\n{emoji} {tool_name}({args_str})")
+                            else:
+                                print(f"\n{emoji} {tool_name}()")
+                        
+                        elif chunk_type == 'final_answer':
+                            # ReAct: Final answer
+                            if in_thought:
+                                print()  # End thought line
+                                in_thought = False
+                            
+                            await thinking.stop()
+                            print(f"\n\033[36mA2IA:\033[0m {chunk['content']}")
+                            has_printed_label = True
+                            break
+                        
                         elif chunk_type == 'done':
                             # Final message received
                             if not has_printed_label:
@@ -351,9 +402,10 @@ async def main():
     parser.add_argument("--model", default="a2ia-qwen", help="Ollama model to use")
     parser.add_argument("--debug", action="store_true", help="Enable debug output")
     parser.add_argument("--show-thinking", action="store_true", help="Show LLM reasoning before actions")
+    parser.add_argument("--react", action="store_true", help="Use ReAct mode (experimental, requires model fine-tuning)")
     args = parser.parse_args()
 
-    cli = CLI(model=args.model, debug=args.debug, show_thinking=args.show_thinking)
+    cli = CLI(model=args.model, debug=args.debug, show_thinking=args.show_thinking, use_react=args.react)
     await cli.start()
 
 
