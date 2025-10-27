@@ -131,7 +131,8 @@ class CLI:
         self,
         model: str = "a2ia-qwen",
         mcp_command: Optional[list] = None,
-        debug: bool = False
+        debug: bool = False,
+        show_thinking: bool = False
     ):
         """Initialize CLI.
 
@@ -139,10 +140,12 @@ class CLI:
             model: Ollama model to use
             mcp_command: MCP server command (default: local A2IA server)
             debug: Enable debug output showing message history
+            show_thinking: Show LLM thinking/reasoning before actions
         """
         self.model = model
         self.mcp_command = mcp_command or ["python3", "-m", "a2ia.server", "--mode", "mcp"]
         self.debug = debug
+        self.show_thinking = show_thinking
 
         self.llm_client = OllamaClient(model=model)
         self.mcp_client = SimpleMCPClient(server_command=self.mcp_command)
@@ -231,6 +234,7 @@ class CLI:
                 has_printed_label = False
                 has_content = False
                 after_tool = False
+                thinking_buffer = []  # Buffer first few chunks to detect tool calls
                 
                 try:
                     async for chunk in self.orchestrator.process_turn_streaming():
@@ -294,6 +298,10 @@ class CLI:
                             print(f"   ✗ {error}")
                             after_tool = True
                         
+                        elif chunk_type == 'warning':
+                            # Show validation warning
+                            print(f"   ⚠️  {chunk['message']}")
+                        
                         elif chunk_type == 'done':
                             # Final message received
                             if not has_printed_label:
@@ -342,9 +350,10 @@ async def main():
     parser = argparse.ArgumentParser(description="A2IA CLI")
     parser.add_argument("--model", default="a2ia-qwen", help="Ollama model to use")
     parser.add_argument("--debug", action="store_true", help="Enable debug output")
+    parser.add_argument("--show-thinking", action="store_true", help="Show LLM reasoning before actions")
     args = parser.parse_args()
 
-    cli = CLI(model=args.model, debug=args.debug)
+    cli = CLI(model=args.model, debug=args.debug, show_thinking=args.show_thinking)
     await cli.start()
 
 
