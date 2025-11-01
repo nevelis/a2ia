@@ -14,7 +14,7 @@ import logging
 import traceback
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, HTTPException, Request, Security
+from fastapi import Depends, FastAPI, Form, HTTPException, Request, Security
 from fastapi.responses import PlainTextResponse, JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
@@ -1239,29 +1239,36 @@ async def get_businessmap_config(authenticated: bool = Depends(verify_token)):
 # OAuth Discovery Endpoints (RFC 9728, RFC 8414)
 # ============================================================================
 
-@app.get("/.well-known/oauth-protected-resource", tags=["OAuth"], include_in_schema=False)
-async def oauth_protected_resource():
-    """OAuth 2.0 Protected Resource Metadata (RFC 9728).
-
-    Tells clients where to find the authorization server.
-    """
-    # Get the server base URL from environment or use default
+def _oauth_protected_resource_metadata():
+    """Generate OAuth protected resource metadata."""
     server_base = os.getenv("A2IA_BASE_URL", "https://a2ia.amazingland.live")
-
     return {
         "resource": f"{server_base}/mcp/",
         "authorization_servers": [server_base]
     }
 
 
-@app.get("/.well-known/oauth-authorization-server", tags=["OAuth"], include_in_schema=False)
-async def oauth_authorization_server():
-    """OAuth 2.0 Authorization Server Metadata (RFC 8414).
+@app.get("/.well-known/oauth-protected-resource", tags=["OAuth"], include_in_schema=False)
+async def oauth_protected_resource():
+    """OAuth 2.0 Protected Resource Metadata (RFC 9728).
 
-    Describes available OAuth endpoints and capabilities.
+    Tells clients where to find the authorization server.
     """
-    server_base = os.getenv("A2IA_BASE_URL", "https://a2ia.amazingland.live")
+    return _oauth_protected_resource_metadata()
 
+
+@app.get("/.well-known/oauth-protected-resource/mcp", tags=["OAuth"], include_in_schema=False)
+async def oauth_protected_resource_mcp():
+    """OAuth 2.0 Protected Resource Metadata for MCP (RFC 9728).
+
+    MCP-specific alias for protected resource metadata.
+    """
+    return _oauth_protected_resource_metadata()
+
+
+def _oauth_server_metadata():
+    """Generate OAuth server metadata."""
+    server_base = os.getenv("A2IA_BASE_URL", "https://a2ia.amazingland.live")
     return {
         "issuer": server_base,
         "authorization_endpoint": f"{server_base}/mcp/authorize",
@@ -1273,6 +1280,24 @@ async def oauth_authorization_server():
         "code_challenge_methods_supported": ["S256"],  # Required by MCP spec
         "token_endpoint_auth_methods_supported": ["client_secret_basic", "client_secret_post"],
     }
+
+
+@app.get("/.well-known/oauth-authorization-server", tags=["OAuth"], include_in_schema=False)
+async def oauth_authorization_server():
+    """OAuth 2.0 Authorization Server Metadata (RFC 8414).
+
+    Describes available OAuth endpoints and capabilities.
+    """
+    return _oauth_server_metadata()
+
+
+@app.get("/.well-known/oauth-authorization-server/mcp", tags=["OAuth"], include_in_schema=False)
+async def oauth_authorization_server_mcp():
+    """OAuth 2.0 Authorization Server Metadata for MCP (RFC 8414).
+
+    MCP-specific alias for authorization server metadata.
+    """
+    return _oauth_server_metadata()
 
 
 # ============================================================================
@@ -1322,17 +1347,25 @@ class TokenRequest(BaseModel):
 
 
 @app.post("/mcp/token", tags=["MCP OAuth"], include_in_schema=False)
-async def mcp_token(token_request: TokenRequest):
+async def mcp_token(
+    grant_type: str = Form(...),
+    code: str | None = Form(None),
+    redirect_uri: str | None = Form(None),
+    client_id: str | None = Form(None),
+    client_secret: str | None = Form(None),
+    code_verifier: str | None = Form(None),
+):
     """OAuth Token Endpoint (RFC 6749).
 
     Stub implementation - issues access tokens for registered clients.
+    Accepts application/x-www-form-urlencoded as per OAuth 2.0 spec.
     """
     import secrets
 
     # Generate access token
     access_token = secrets.token_urlsafe(32)
 
-    logger.info(f"Issued token for client: {token_request.client_id}")
+    logger.info(f"Issued token for client: {client_id}, grant_type: {grant_type}")
 
     return {
         "access_token": access_token,
