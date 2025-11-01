@@ -1509,16 +1509,38 @@ async def mcp_jsonrpc(request: Request):
             arguments = params.get("arguments", {})
 
             result = await mcp_app.call_tool(tool_name, arguments)
+
+            # Result is already a list of TextContent objects from FastMCP
+            # Convert to MCP protocol format
+            if isinstance(result, list):
+                # Extract text from TextContent objects
+                content = []
+                for item in result:
+                    if hasattr(item, 'text'):
+                        content.append({
+                            "type": "text",
+                            "text": item.text
+                        })
+                    else:
+                        # Fallback for unexpected types
+                        content.append({
+                            "type": "text",
+                            "text": str(item)
+                        })
+            else:
+                # Fallback for non-list results
+                content = [
+                    {
+                        "type": "text",
+                        "text": json.dumps(result) if not isinstance(result, str) else result
+                    }
+                ]
+
             response = {
                 "jsonrpc": "2.0",
                 "id": jsonrpc_request.get("id"),
                 "result": {
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": json.dumps(result) if not isinstance(result, str) else result
-                        }
-                    ]
+                    "content": content
                 }
             }
         elif method == "resources/list":
