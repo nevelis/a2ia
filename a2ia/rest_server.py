@@ -1485,7 +1485,7 @@ async def mcp_jsonrpc(request: Request):
                         {
                             "name": tool.name,
                             "description": tool.description or "",
-                            "inputSchema": tool.parameters or {}
+                            "inputSchema": tool.inputSchema or {}
                         }
                         for tool in tools
                     ]
@@ -1517,7 +1517,7 @@ async def mcp_jsonrpc(request: Request):
                 "result": {
                     "resources": [
                         {
-                            "uri": resource.uri,
+                            "uri": str(resource.uri),  # Convert AnyUrl to string
                             "name": resource.name,
                             "description": resource.description or "",
                             "mimeType": resource.mimeType or "text/plain"
