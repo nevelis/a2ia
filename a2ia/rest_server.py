@@ -65,6 +65,19 @@ app.servers = [
     }
 ]
 
+# Import all tools to register them with MCP before defining endpoints
+from .tools import (  # noqa: F401
+    workspace_tools,
+    filesystem_tools,
+    shell_tools,
+    memory_tools,
+    git_tools,
+    git_sdlc_tools,
+    ci_tools,
+    terraform_tools,
+    businessmap_tools,
+)
+
 
 # Customize OpenAPI schema to add x-openai-isConsequential flags
 def custom_openapi():
@@ -1426,10 +1439,11 @@ async def mcp_jsonrpc(request: Request):
     """
     from fastapi.responses import StreamingResponse
     import json
+    from mcp.types import JSONRPCMessage
 
     # Get the MCP app instance
     from .core import get_mcp_app
-    mcp = get_mcp_app()
+    mcp_app = get_mcp_app()
 
     # Read JSON-RPC request
     try:
@@ -1438,22 +1452,120 @@ async def mcp_jsonrpc(request: Request):
         logger.error(f"Invalid JSON-RPC request: {e}")
         raise HTTPException(status_code=400, detail="Invalid JSON-RPC request")
 
-    logger.info(f"MCP JSON-RPC request: {jsonrpc_request.get('method', 'unknown')}")
+    method = jsonrpc_request.get("method", "unknown")
+    logger.info(f"MCP JSON-RPC request: {method}")
+
+    # Create a session and process the request
+    try:
+        # Handle different MCP methods
+        if method == "initialize":
+            response = {
+                "jsonrpc": "2.0",
+                "id": jsonrpc_request.get("id"),
+                "result": {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {
+                        "tools": {},
+                        "resources": {},
+                        "prompts": {}
+                    },
+                    "serverInfo": {
+                        "name": "a2ia",
+                        "version": "0.2.0"
+                    }
+                }
+            }
+        elif method == "tools/list":
+            tools = await mcp_app.list_tools()
+            response = {
+                "jsonrpc": "2.0",
+                "id": jsonrpc_request.get("id"),
+                "result": {
+                    "tools": [
+                        {
+                            "name": tool.name,
+                            "description": tool.description or "",
+                            "inputSchema": tool.parameters or {}
+                        }
+                        for tool in tools
+                    ]
+                }
+            }
+        elif method == "tools/call":
+            params = jsonrpc_request.get("params", {})
+            tool_name = params.get("name")
+            arguments = params.get("arguments", {})
+
+            result = await mcp_app.call_tool(tool_name, arguments)
+            response = {
+                "jsonrpc": "2.0",
+                "id": jsonrpc_request.get("id"),
+                "result": {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": json.dumps(result) if not isinstance(result, str) else result
+                        }
+                    ]
+                }
+            }
+        elif method == "resources/list":
+            resources = await mcp_app.list_resources()
+            response = {
+                "jsonrpc": "2.0",
+                "id": jsonrpc_request.get("id"),
+                "result": {
+                    "resources": [
+                        {
+                            "uri": resource.uri,
+                            "name": resource.name,
+                            "description": resource.description or "",
+                            "mimeType": resource.mimeType or "text/plain"
+                        }
+                        for resource in resources
+                    ]
+                }
+            }
+        elif method == "prompts/list":
+            prompts = await mcp_app.list_prompts()
+            response = {
+                "jsonrpc": "2.0",
+                "id": jsonrpc_request.get("id"),
+                "result": {
+                    "prompts": [
+                        {
+                            "name": prompt.name,
+                            "description": prompt.description or "",
+                            "arguments": prompt.arguments or []
+                        }
+                        for prompt in prompts
+                    ]
+                }
+            }
+        else:
+            # Unknown method
+            response = {
+                "jsonrpc": "2.0",
+                "id": jsonrpc_request.get("id"),
+                "error": {
+                    "code": -32601,
+                    "message": f"Method not found: {method}"
+                }
+            }
+    except Exception as e:
+        logger.exception(f"Error processing MCP request: {e}")
+        response = {
+            "jsonrpc": "2.0",
+            "id": jsonrpc_request.get("id"),
+            "error": {
+                "code": -32603,
+                "message": f"Internal error: {str(e)}"
+            }
+        }
 
     # Check Accept header
     accept_header = request.headers.get("accept", "")
     supports_sse = "text/event-stream" in accept_header
-
-    # For now, return a stub response
-    # TODO: Route to actual MCP app handler
-    response = {
-        "jsonrpc": "2.0",
-        "id": jsonrpc_request.get("id"),
-        "result": {
-            "message": "MCP endpoint stub - not yet fully implemented",
-            "request_method": jsonrpc_request.get("method")
-        }
-    }
 
     if supports_sse:
         # Return as SSE stream
