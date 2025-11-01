@@ -1,0 +1,3 @@
+[submodule "agast"]
+	path = agast
+	url = git@github.com:nevelis/agast.git
