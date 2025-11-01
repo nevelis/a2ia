@@ -8,7 +8,7 @@ import asyncio
 from .core import get_mcp_app
 
 # Import all tools to register them with FastMCP
-from .tools import workspace_tools, filesystem_tools, shell_tools, memory_tools, git_tools  # noqa: F401
+from .tools import workspace_tools, filesystem_tools, shell_tools, memory_tools, git_tools, businessmap_tools  # noqa: F401
 
 
 def run():

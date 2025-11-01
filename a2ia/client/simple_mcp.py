@@ -56,7 +56,7 @@ class SimpleMCPClient:
         Accepts TitleCase names from LLM and maps to snake_case functions.
         """
         # Import all tool modules
-        from ..tools import filesystem_tools, git_tools, git_sdlc_tools, shell_tools, memory_tools, workspace_tools, terraform_tools, ci_tools
+        from ..tools import filesystem_tools, git_tools, git_sdlc_tools, shell_tools, memory_tools, workspace_tools, terraform_tools, ci_tools, businessmap_tools
 
         # Convert TitleCase to snake_case
         import re
@@ -120,6 +120,19 @@ class SimpleMCPClient:
             "list_memories": memory_tools.list_memories,
             # Workspace
             "get_workspace_info": workspace_tools.get_workspace_info,
+            # Businessmap
+            "get_team_members": businessmap_tools.get_team_members,
+            "list_all_teams": businessmap_tools.list_all_teams,
+            "get_card_details": businessmap_tools.get_card_details,
+            "get_businessmap_card": businessmap_tools.get_businessmap_card,
+            "get_businessmap_card_with_children": businessmap_tools.get_businessmap_card_with_children,
+            "get_businessmap_cards_by_board": businessmap_tools.get_businessmap_cards_by_board,
+            "get_businessmap_cards_by_column": businessmap_tools.get_businessmap_cards_by_column,
+            "search_businessmap_cards_by_assignee": businessmap_tools.search_businessmap_cards_by_assignee,
+            "get_businessmap_blocked_cards": businessmap_tools.get_businessmap_blocked_cards,
+            "get_businessmap_board_structure": businessmap_tools.get_businessmap_board_structure,
+            "get_businessmap_workflow_columns": businessmap_tools.get_businessmap_workflow_columns,
+            "get_businessmap_column_name": businessmap_tools.get_businessmap_column_name,
             # Terraform
             "terraform_init": terraform_tools.terraform_init,
             "terraform_plan": terraform_tools.terraform_plan,
@@ -141,103 +154,87 @@ class SimpleMCPClient:
         tool_func = tool_map[snake_name]
         return await tool_func(**arguments)
 
+    def _convert_mcp_tool_to_ollama_format(self, tool) -> Dict[str, Any]:
+        """Convert MCP tool format to Ollama function format.
+        
+        Args:
+            tool: MCP Tool object with name, description, and inputSchema
+            
+        Returns:
+            Dict in Ollama format with type='function' and function details
+        """
+        # Convert snake_case to TitleCase for Ollama
+        import re
+        name_parts = tool.name.split('_')
+        title_case_name = ''.join(word.capitalize() for word in name_parts)
+        
+        # Extract parameters from inputSchema
+        input_schema = tool.inputSchema if hasattr(tool, 'inputSchema') else {}
+        properties = input_schema.get('properties', {})
+        required = input_schema.get('required', [])
+        
+        return {
+            "type": "function",
+            "function": {
+                "name": title_case_name,
+                "description": tool.description,
+                "parameters": {
+                    "type": "object",
+                    "properties": properties,
+                    "required": required
+                }
+            }
+        }
+    
     def list_tools(self) -> List[Dict[str, Any]]:
-        """List available tools."""
-        # Get all tools from A2IA by importing them
-        tools = []
-
-        # Filesystem tools (TitleCase names)
-        tools.extend([
-            {"type": "function", "function": {"name": "ReadFile", "description": "Read file contents", "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}},
-            {"type": "function", "function": {"name": "WriteFile", "description": "Write/overwrite file", "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}}, "required": ["path", "content"]}}},
-            {"type": "function", "function": {"name": "AppendFile", "description": "Append content to end of file", "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}}, "required": ["path", "content"]}}},
-            {"type": "function", "function": {"name": "FindReplace", "description": "Find and replace text in file", "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "find": {"type": "string"}, "replace": {"type": "string"}, "count": {"type": "integer"}}, "required": ["path", "find", "replace"]}}},
-            {"type": "function", "function": {"name": "FindReplaceRegex", "description": "Find and replace using regex patterns", "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "pattern": {"type": "string"}, "replacement": {"type": "string"}, "count": {"type": "integer"}}, "required": ["path", "pattern", "replacement"]}}},
-            {"type": "function", "function": {"name": "PatchFile", "description": "Apply unified diff patch to file", "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "diff": {"type": "string"}}, "required": ["path", "diff"]}}},
-            {"type": "function", "function": {"name": "TruncateFile", "description": "Truncate file to size (0=empty)", "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "size": {"type": "integer"}}}}},
-            {"type": "function", "function": {"name": "ListDirectory", "description": "List directory contents", "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "recursive": {"type": "boolean"}}}}},
-            {"type": "function", "function": {"name": "DeleteFile", "description": "Delete file or directory", "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "recursive": {"type": "boolean"}}}}},
-            {"type": "function", "function": {"name": "PruneDirectory", "description": "Delete all except matching patterns", "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "keep_patterns": {"type": "array"}}, "required": ["path"]}}},
-            {"type": "function", "function": {"name": "MoveFile", "description": "Move/rename file", "parameters": {"type": "object", "properties": {"source": {"type": "string"}, "destination": {"type": "string"}}, "required": ["source", "destination"]}}},
-            {"type": "function", "function": {"name": "Head", "description": "Read first N lines of file", "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "lines": {"type": "integer"}}, "required": ["path"]}}},
-            {"type": "function", "function": {"name": "Tail", "description": "Read last N lines of file", "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "lines": {"type": "integer"}}, "required": ["path"]}}},
-            {"type": "function", "function": {"name": "Grep", "description": "Search for pattern in files", "parameters": {"type": "object", "properties": {"pattern": {"type": "string"}, "path": {"type": "string"}, "regex": {"type": "boolean"}, "recursive": {"type": "boolean"}, "ignore_case": {"type": "boolean"}}, "required": ["pattern", "path"]}}},
-        ])
-
-        # Git tools (TitleCase names)
-        tools.extend([
-            {"type": "function", "function": {"name": "GitStatus", "description": "Show git status", "parameters": {"type": "object"}}},
-            {"type": "function", "function": {"name": "GitDiff", "description": "Show git diff", "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "staged": {"type": "boolean"}}}}},
-            {"type": "function", "function": {"name": "GitAdd", "description": "Stage files for commit", "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}},
-            {"type": "function", "function": {"name": "GitCommit", "description": "Commit changes", "parameters": {"type": "object", "properties": {"message": {"type": "string"}}, "required": ["message"]}}},
-            {"type": "function", "function": {"name": "GitLog", "description": "View commit history", "parameters": {"type": "object", "properties": {"limit": {"type": "integer"}}}}},
-            {"type": "function", "function": {"name": "GitReset", "description": "Reset to previous commit", "parameters": {"type": "object", "properties": {"commit": {"type": "string"}, "hard": {"type": "boolean"}}}}},
-            {"type": "function", "function": {"name": "GitBlame", "description": "Show who changed each line", "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}},
-            {"type": "function", "function": {"name": "GitCheckout", "description": "Switch branch or commit", "parameters": {"type": "object", "properties": {"branch_or_commit": {"type": "string"}, "create_new": {"type": "boolean"}}, "required": ["branch_or_commit"]}}},
-            {"type": "function", "function": {"name": "GitBranchCreate", "description": "Create new branch", "parameters": {"type": "object", "properties": {"name": {"type": "string"}, "from_branch": {"type": "string"}}, "required": ["name"]}}},
-            {"type": "function", "function": {"name": "GitListBranches", "description": "List all branches", "parameters": {"type": "object", "properties": {"all_branches": {"type": "boolean"}}}}},
-            {"type": "function", "function": {"name": "GitPush", "description": "Push to remote safely", "parameters": {"type": "object", "properties": {"remote": {"type": "string"}, "branch": {"type": "string"}, "force_with_lease": {"type": "boolean"}}}}},
-            {"type": "function", "function": {"name": "GitPull", "description": "Pull with rebase", "parameters": {"type": "object", "properties": {"remote": {"type": "string"}, "branch": {"type": "string"}}}}},
-            {"type": "function", "function": {"name": "GitShow", "description": "Show commit details", "parameters": {"type": "object", "properties": {"commit": {"type": "string"}, "summarize": {"type": "boolean"}}}}},
-            {"type": "function", "function": {"name": "GitStash", "description": "Stash operations", "parameters": {"type": "object", "properties": {"subaction": {"type": "string"}, "name": {"type": "string"}, "message": {"type": "string"}}, "required": ["subaction"]}}},
-        ])
-
-        # Git SDLC tools (TitleCase names)
-        tools.extend([
-            {"type": "function", "function": {"name": "GitCreateEpochBranch", "description": "Create epoch branch from main", "parameters": {"type": "object", "properties": {"number": {"type": "integer"}, "descriptor": {"type": "string"}}, "required": ["number", "descriptor"]}}},
-            {"type": "function", "function": {"name": "GitRebaseMain", "description": "Rebase onto main", "parameters": {"type": "object"}}},
-            {"type": "function", "function": {"name": "GitPushBranch", "description": "Push branch to remote", "parameters": {"type": "object", "properties": {"remote": {"type": "string"}, "force": {"type": "boolean"}}}}},
-            {"type": "function", "function": {"name": "GitSquashEpoch", "description": "Squash epoch commits", "parameters": {"type": "object", "properties": {"message": {"type": "string"}}, "required": ["message"]}}},
-            {"type": "function", "function": {"name": "GitFastForwardMerge", "description": "Fast-forward merge to main", "parameters": {"type": "object", "properties": {"branch": {"type": "string"}}}}},
-            {"type": "function", "function": {"name": "GitTagEpochFinal", "description": "Tag epoch as final", "parameters": {"type": "object", "properties": {"epoch_number": {"type": "integer"}, "message": {"type": "string"}}, "required": ["epoch_number"]}}},
-            {"type": "function", "function": {"name": "GitCherryPickPhase", "description": "Cherry-pick commit", "parameters": {"type": "object", "properties": {"commit_hash": {"type": "string"}}, "required": ["commit_hash"]}}},
-            {"type": "function", "function": {"name": "WorkspaceSync", "description": "Sync with remote", "parameters": {"type": "object", "properties": {"remote": {"type": "string"}}}}},
-        ])
-
-        # Shell tools (TitleCase names)
-        tools.extend([
-            {"type": "function", "function": {"name": "ExecuteCommand", "description": "Execute shell command (non-interactive)", "parameters": {"type": "object", "properties": {"command": {"type": "string"}, "timeout": {"type": "integer"}, "cwd": {"type": "string"}}, "required": ["command"]}}},
-            {"type": "function", "function": {"name": "ExecuteTurk", "description": "Execute shell command with human operator oversight for safe execution", "parameters": {"type": "object", "properties": {"command": {"type": "string"}, "timeout": {"type": "integer"}, "cwd": {"type": "string"}}, "required": ["command"]}}},
-            {"type": "function", "function": {"name": "TurkInfo", "description": "Get ExecuteTurk usage statistics", "parameters": {"type": "object"}}},
-            {"type": "function", "function": {"name": "TurkReset", "description": "Reset ExecuteTurk tracking", "parameters": {"type": "object"}}},
-        ])
-
-        # CI/Testing tools (TitleCase names)
-        tools.extend([
-            {"type": "function", "function": {"name": "Make", "description": "Run make targets", "parameters": {"type": "object", "properties": {"target": {"type": "string"}, "makefile": {"type": "string"}}}}},
-            {"type": "function", "function": {"name": "Ruff", "description": "Run Ruff linter/formatter", "parameters": {"type": "object", "properties": {"action": {"type": "string"}, "path": {"type": "string"}, "fix": {"type": "boolean"}}}}},
-            {"type": "function", "function": {"name": "Black", "description": "Run Black formatter", "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "check": {"type": "boolean"}}}}},
-            {"type": "function", "function": {"name": "PytestRun", "description": "Run pytest tests", "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "markers": {"type": "string"}, "verbose": {"type": "boolean"}, "coverage": {"type": "boolean"}}}}},
-        ])
-
-        # Memory tools (TitleCase names)
-        tools.extend([
-            {"type": "function", "function": {"name": "StoreMemory", "description": "Store knowledge in memory", "parameters": {"type": "object", "properties": {"content": {"type": "string"}, "tags": {"type": "array"}}, "required": ["content"]}}},
-            {"type": "function", "function": {"name": "RecallMemory", "description": "Search memories", "parameters": {"type": "object", "properties": {"query": {"type": "string"}, "limit": {"type": "integer"}}, "required": ["query"]}}},
-            {"type": "function", "function": {"name": "ListMemories", "description": "List all memories", "parameters": {"type": "object", "properties": {"limit": {"type": "integer"}}}}},
-        ])
-
-        # Workspace tools (TitleCase names)
-        tools.append(
-            {"type": "function", "function": {"name": "GetWorkspaceInfo", "description": "Get workspace information", "parameters": {"type": "object"}}}
+        """List available tools by dynamically querying the MCP server.
+        
+        This method imports the MCP app and queries it for registered tools,
+        ensuring we always have the latest tool definitions without hardcoding.
+        
+        Note: This is a synchronous wrapper around an async operation.
+        """
+        import asyncio
+        
+        # Check if we're in an async context
+        try:
+            loop = asyncio.get_running_loop()
+            # We're already in an async context - use nest_asyncio or run in executor
+            import nest_asyncio
+            nest_asyncio.apply()
+        except RuntimeError:
+            # No running loop, create one
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        
+        return loop.run_until_complete(self._list_tools_async())
+    
+    async def _list_tools_async(self) -> List[Dict[str, Any]]:
+        """Async implementation of list_tools."""
+        # Import and get the MCP app (this triggers tool registration)
+        from ..core import get_mcp_app
+        from ..tools import (
+            workspace_tools,
+            filesystem_tools, 
+            shell_tools,
+            memory_tools,
+            git_tools,
+            businessmap_tools
         )
-
-        # Terraform tools (TitleCase names)
-        tools.extend([
-            {"type": "function", "function": {"name": "TerraformInit", "description": "Initialize Terraform", "parameters": {"type": "object", "properties": {"upgrade": {"type": "boolean"}}}}},
-            {"type": "function", "function": {"name": "TerraformPlan", "description": "Generate execution plan", "parameters": {"type": "object", "properties": {"var_file": {"type": "string"}, "out": {"type": "string"}}}}},
-            {"type": "function", "function": {"name": "TerraformApply", "description": "Apply changes (auto-approved)", "parameters": {"type": "object", "properties": {"auto_approve": {"type": "boolean"}, "plan_file": {"type": "string"}}}}},
-            {"type": "function", "function": {"name": "TerraformDestroy", "description": "Destroy infrastructure", "parameters": {"type": "object", "properties": {"auto_approve": {"type": "boolean"}}}}},
-            {"type": "function", "function": {"name": "TerraformValidate", "description": "Validate configuration", "parameters": {"type": "object"}}},
-            {"type": "function", "function": {"name": "TerraformWorkspace", "description": "Manage workspaces", "parameters": {"type": "object", "properties": {"name": {"type": "string"}, "action": {"type": "string"}}, "required": ["name"]}}},
-            {"type": "function", "function": {"name": "TerraformImport", "description": "Import existing resource", "parameters": {"type": "object", "properties": {"address": {"type": "string"}, "id": {"type": "string"}}, "required": ["address", "id"]}}},
-            {"type": "function", "function": {"name": "TerraformState", "description": "Manage state", "parameters": {"type": "object", "properties": {"action": {"type": "string"}, "args": {"type": "array"}}, "required": ["action"]}}},
-            {"type": "function", "function": {"name": "TerraformTaint", "description": "Mark resource for recreation", "parameters": {"type": "object", "properties": {"address": {"type": "string"}}, "required": ["address"]}}},
-            {"type": "function", "function": {"name": "TerraformUntaint", "description": "Remove taint mark", "parameters": {"type": "object", "properties": {"address": {"type": "string"}}, "required": ["address"]}}},
-            {"type": "function", "function": {"name": "TerraformOutput", "description": "Get output values", "parameters": {"type": "object", "properties": {"name": {"type": "string"}}}}},
-        ])
-
-        return tools
+        
+        # Get the MCP app instance
+        mcp = get_mcp_app()
+        
+        # Get tools from MCP server
+        mcp_tools = await mcp.list_tools()
+        
+        # Convert to Ollama format
+        ollama_tools = []
+        for tool in mcp_tools:
+            ollama_tool = self._convert_mcp_tool_to_ollama_format(tool)
+            ollama_tools.append(ollama_tool)
+        
+        return ollama_tools
 
     async def __aenter__(self):
         await self.connect()

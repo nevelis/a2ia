@@ -998,3 +998,238 @@ async def git_operation(
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+# ============================================================================
+# Businessmap/Kanbanize Operations
+# ============================================================================
+
+@app.get("/businessmap/teams", tags=["Businessmap"], operation_id="ListTeams")
+async def list_teams(authenticated: bool = Depends(verify_token)):
+    """List all available teams."""
+    from .tools.data import TEAMS
+    return {
+        "teams": list(TEAMS.keys()),
+        "teamMembers": TEAMS
+    }
+
+
+@app.get("/businessmap/teams/{team_name}", tags=["Businessmap"], operation_id="GetTeamMembers")
+async def get_team_members_rest(team_name: str, authenticated: bool = Depends(verify_token)):
+    """Get all members of a specific team."""
+    from .tools.data import TEAMS
+    
+    team_name_lower = team_name.lower()
+    if team_name_lower not in TEAMS:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Team '{team_name}' not found. Available teams: {list(TEAMS.keys())}"
+        )
+    
+    return {
+        "teamMembers": {
+            team_name_lower: TEAMS[team_name_lower]
+        }
+    }
+
+
+@app.get("/businessmap/cards/{card_id}", tags=["Businessmap"], operation_id="GetCard")
+async def get_card(card_id: int, authenticated: bool = Depends(verify_token)):
+    """Fetch a single card from Businessmap by ID."""
+    from .tools import businessmap
+    
+    try:
+        card_data = await businessmap.get_card_async(card_id)
+        if card_data is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Card {card_id} not found or API request failed"
+            )
+        return card_data
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching card {card_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.get("/businessmap/cards/{card_id}/children", tags=["Businessmap"], operation_id="GetCardWithChildren")
+async def get_card_with_children(card_id: int, authenticated: bool = Depends(verify_token)):
+    """Fetch a card and all its child cards recursively."""
+    from .tools import businessmap
+    
+    try:
+        card_hierarchy = await businessmap.get_card_with_children(card_id)
+        if card_hierarchy is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Card {card_id} not found or API request failed"
+            )
+        return card_hierarchy
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching card hierarchy for {card_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.get("/businessmap/boards/{board_id}/cards", tags=["Businessmap"], operation_id="GetCardsByBoard")
+async def get_cards_by_board(board_id: int = None, authenticated: bool = Depends(verify_token)):
+    """Get all cards for a specific board."""
+    from .tools import businessmap
+    
+    try:
+        cards = await businessmap.get_cards_by_board(board_id)
+        if cards is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Failed to fetch cards or board not found"
+            )
+        return {"cards": cards, "count": len(cards)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching cards by board: {e}")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.get("/businessmap/boards/{board_id}/columns/{column_id}/cards", tags=["Businessmap"], operation_id="GetCardsByColumn")
+async def get_cards_by_column(
+    board_id: int = None,
+    column_id: int = None,
+    authenticated: bool = Depends(verify_token)
+):
+    """Get all cards in a specific column."""
+    from .tools import businessmap
+    
+    try:
+        cards = await businessmap.get_cards_by_column(board_id, column_id)
+        if cards is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Failed to fetch cards or column not found"
+            )
+        return {"cards": cards, "count": len(cards)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching cards by column: {e}")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.get("/businessmap/cards/search/assignee/{assignee_name}", tags=["Businessmap"], operation_id="SearchCardsByAssignee")
+async def search_cards_by_assignee(
+    assignee_name: str,
+    board_id: int = None,
+    authenticated: bool = Depends(verify_token)
+):
+    """Search for cards assigned to a specific user."""
+    from .tools import businessmap
+    
+    try:
+        cards = await businessmap.search_cards_by_assignee(assignee_name, board_id)
+        if cards is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Failed to fetch cards or assignee '{assignee_name}' not found"
+            )
+        return {"cards": cards, "count": len(cards), "assignee": assignee_name}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error searching cards by assignee: {e}")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.get("/businessmap/boards/{board_id}/blocked", tags=["Businessmap"], operation_id="GetBlockedCards")
+async def get_blocked_cards(board_id: int = None, authenticated: bool = Depends(verify_token)):
+    """Get all blocked cards on a board."""
+    from .tools import businessmap
+    
+    try:
+        cards = await businessmap.get_blocked_cards(board_id)
+        if cards is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Failed to fetch blocked cards"
+            )
+        return {"blocked_cards": cards, "count": len(cards)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching blocked cards: {e}")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.get("/businessmap/boards/{board_id}/structure", tags=["Businessmap"], operation_id="GetBoardStructure")
+async def get_board_structure(board_id: int = None, authenticated: bool = Depends(verify_token)):
+    """Get the workflow structure for a board including columns."""
+    from .tools import businessmap
+    
+    try:
+        structure = await businessmap.get_board_structure(board_id)
+        if structure is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Failed to fetch board structure"
+            )
+        return structure
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching board structure: {e}")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.get("/businessmap/workflows/{workflow_id}/columns", tags=["Businessmap"], operation_id="GetWorkflowColumns")
+async def get_workflow_columns(workflow_id: int = None, authenticated: bool = Depends(verify_token)):
+    """Get all columns for a specific workflow."""
+    from .tools import businessmap
+    
+    try:
+        columns = await businessmap.get_workflow_columns(workflow_id)
+        if columns is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Failed to fetch workflow columns"
+            )
+        return {"columns": columns, "count": len(columns)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching workflow columns: {e}")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.get("/businessmap/columns/{column_id}/name", tags=["Businessmap"], operation_id="GetColumnName")
+async def get_column_name(column_id: int, authenticated: bool = Depends(verify_token)):
+    """Get the name of a column by its ID."""
+    from .tools import businessmap
+    
+    try:
+        column_name = await businessmap.get_column_name(column_id)
+        if column_name is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Column {column_id} not found"
+            )
+        return {"column_id": column_id, "name": column_name}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching column name: {e}")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.get("/businessmap/config", tags=["Businessmap"], operation_id="GetBusinessmapConfig")
+async def get_businessmap_config(authenticated: bool = Depends(verify_token)):
+    """Get current Businessmap configuration (sanitized, no keys)."""
+    from .tools import businessmap
+    
+    return {
+        "api_url": businessmap.API_URL,
+        "board_id": businessmap.BOARD_ID,
+        "workflow_id": businessmap.WORKFLOW_ID,
+        "column_id": businessmap.COLUMN_ID,
+        "api_key_configured": bool(businessmap.API_KEY),
+    }

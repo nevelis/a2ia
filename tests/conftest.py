@@ -1,5 +1,6 @@
 import os
 import pytest
+from unittest.mock import AsyncMock
 from a2ia.workspace import Workspace
 from a2ia.core import set_workspace
 
@@ -49,3 +50,42 @@ def sandbox_ws(tmp_path, monkeypatch):
     else:
         monkeypatch.delenv("A2IA_WORKSPACE_PATH", raising=False)
     os.chdir(original_cwd)
+
+
+@pytest.fixture(autouse=True)
+def mock_sleep(monkeypatch):
+    """
+    Automatically mock asyncio.sleep in all tests to make them run fast.
+
+    This prevents tests from actually sleeping, while still allowing us to
+    verify that sleep was called with the correct arguments.
+    """
+    mock_sleep_func = AsyncMock()
+
+    # Patch the sleep function in businessmap module
+    try:
+        from a2ia.tools import businessmap
+        monkeypatch.setattr(businessmap, "_sleep_func", mock_sleep_func)
+    except ImportError:
+        # Module not loaded yet, that's ok
+        pass
+
+    return mock_sleep_func
+
+
+@pytest.fixture
+def reset_sleep():
+    """
+    Reset sleep function to real asyncio.sleep.
+
+    Use this for tests that actually need to sleep (integration tests).
+    """
+    import asyncio
+    from a2ia.tools import businessmap
+
+    original = asyncio.sleep
+    businessmap.set_sleep_func(original)
+
+    yield
+
+    # No need to restore, autouse fixture will handle next test
