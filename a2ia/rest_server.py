@@ -1536,7 +1536,14 @@ async def mcp_jsonrpc(request: Request):
                         {
                             "name": prompt.name,
                             "description": prompt.description or "",
-                            "arguments": prompt.arguments or []
+                            "arguments": [
+                                {
+                                    "name": arg.name,
+                                    "description": arg.description or "",
+                                    "required": arg.required if hasattr(arg, 'required') else False
+                                }
+                                for arg in (prompt.arguments or [])
+                            ]
                         }
                         for prompt in prompts
                     ]
