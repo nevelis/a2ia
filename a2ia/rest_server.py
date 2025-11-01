@@ -9,6 +9,10 @@ Clean REST API following HTTP semantics:
 """
 
 import os
+
+# Fix huggingface tokenizers fork warning (must be before any imports that use tokenizers)
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
 import subprocess
 import logging
 import traceback
@@ -1464,7 +1468,14 @@ async def mcp_jsonrpc(request: Request):
         raise HTTPException(status_code=400, detail="Invalid JSON-RPC request")
 
     method = jsonrpc_request.get("method", "unknown")
-    logger.info(f"MCP JSON-RPC request: {method}")
+
+    # Enhanced logging for tool calls
+    if method == "tools/call":
+        params = jsonrpc_request.get("params", {})
+        tool_name = params.get("name", "unknown")
+        logger.info(f"MCP JSON-RPC request: {method} -> {tool_name}")
+    else:
+        logger.info(f"MCP JSON-RPC request: {method}")
 
     # Create a session and process the request
     try:
