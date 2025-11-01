@@ -1431,14 +1431,14 @@ async def mcp_head():
 
 
 def _snake_to_title(snake_str: str) -> str:
-    """Convert snake_case to Title Case for display.
+    """Convert snake_case to PascalCase for display.
 
     Examples:
-        git_status -> Git Status
-        execute_turk -> Execute Turk
-        get_businessmap_card -> Get Businessmap Card
+        git_status -> GitStatus
+        execute_turk -> ExecuteTurk
+        get_businessmap_card -> GetBusinessmapCard
     """
-    return ' '.join(word.capitalize() for word in snake_str.replace('_', ' ').split())
+    return ''.join(word.capitalize() for word in snake_str.split('_'))
 
 
 @app.post("/mcp/", tags=["MCP"], include_in_schema=False)
