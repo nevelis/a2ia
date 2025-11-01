@@ -1430,6 +1430,17 @@ async def mcp_head():
     })
 
 
+def _snake_to_title(snake_str: str) -> str:
+    """Convert snake_case to Title Case for display.
+
+    Examples:
+        git_status -> Git Status
+        execute_turk -> Execute Turk
+        get_businessmap_card -> Get Businessmap Card
+    """
+    return ' '.join(word.capitalize() for word in snake_str.replace('_', ' ').split())
+
+
 @app.post("/mcp/", tags=["MCP"], include_in_schema=False)
 async def mcp_jsonrpc(request: Request):
     """MCP JSON-RPC endpoint (Streamable HTTP transport).
@@ -1484,6 +1495,7 @@ async def mcp_jsonrpc(request: Request):
                     "tools": [
                         {
                             "name": tool.name,
+                            "title": tool.title or _snake_to_title(tool.name),  # Auto-generate title
                             "description": tool.description or "",
                             "inputSchema": tool.inputSchema or {}
                         }
