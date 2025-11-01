@@ -1,0 +1,113 @@
+# Example: What the Ollama Template Receives
+
+When A2IA sends a request to Ollama with tools, the template
+receives the $.Tools array populated with tool definitions.
+
+Here's what the first 3 tools look like:
+
+```json
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "CreateWorkspace",
+      "description": "Get information about the persistent workspace.\n\nNOTE: This tool is kept for backward compatibility. A2IA now uses a single\npersistent workspace that is automatically initialized. Arguments are ignored.\n\nArgs:\n    workspace_id: Ignored (kept for compatibility)\n    base_path: Ignored (kept for compatibility)\n    description: Ignored (kept for compatibility)\n\nReturns:\n    Dictionary with workspace information\n",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "workspace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Workspace Id"
+          },
+          "base_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Base Path"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "GetWorkspaceInfo",
+      "description": "Get information about the current workspace.\n\nReturns:\n    Dictionary with workspace details\n",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "CloseWorkspace",
+      "description": "No-op: Workspace is persistent and cannot be closed.\n\nNOTE: This tool is kept for backward compatibility. The workspace\nremains active and persistent.\n\nReturns:\n    Dictionary with status message\n",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    }
+  }
+]
+```
+
+# Template Iteration
+
+The template iterates over these with:
+
+```
+{{- range $.Tools }}
+  Tool Name: {{ .Function.Name }}
+  Description: {{ .Function.Description }}
+  
+  Parameters:
+  {{- range $key, $value := .Function.Parameters.Properties }}
+    - {{ $key }} ({{ $value.Type }}): {{ $value.Description }}
+  {{- end }}
+{{- end }}
+```
+
+# Available Fields
+
+For each tool in $.Tools:
+- .type (always 'function')
+- .Function.Name (string)
+- .Function.Description (string)
+- .Function.Parameters.Properties (map)
+  - Each property has:
+    - .Type (string: 'string', 'number', 'boolean', 'object', 'array')
+    - .Description (string)
+    - NOTE: .Required does NOT exist! Use Parameters.Required array instead
+- .Function.Parameters.Required (array of strings)

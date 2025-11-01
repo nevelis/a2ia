@@ -135,8 +135,8 @@ class TestOllamaIntegration:
         except:
             pytest.skip("Ollama not running")
 
-        # Use a2ia-gemma or any available model
-        client = OllamaClient(model="a2ia-gemma")
+        # Use capybara-gguf or any available model
+        client = OllamaClient(model="capybara-gguf")
         messages = [{"role": "user", "content": "Say hello in 5 words or less"}]
 
         response = await client.chat(messages)

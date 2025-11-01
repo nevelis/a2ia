@@ -1225,7 +1225,7 @@ async def get_column_name(column_id: int, authenticated: bool = Depends(verify_t
 async def get_businessmap_config(authenticated: bool = Depends(verify_token)):
     """Get current Businessmap configuration (sanitized, no keys)."""
     from .tools import businessmap
-    
+
     return {
         "api_url": businessmap.API_URL,
         "board_id": businessmap.BOARD_ID,
@@ -1233,3 +1233,252 @@ async def get_businessmap_config(authenticated: bool = Depends(verify_token)):
         "column_id": businessmap.COLUMN_ID,
         "api_key_configured": bool(businessmap.API_KEY),
     }
+
+
+# ============================================================================
+# OAuth Discovery Endpoints (RFC 9728, RFC 8414)
+# ============================================================================
+
+@app.get("/.well-known/oauth-protected-resource", tags=["OAuth"], include_in_schema=False)
+async def oauth_protected_resource():
+    """OAuth 2.0 Protected Resource Metadata (RFC 9728).
+
+    Tells clients where to find the authorization server.
+    """
+    # Get the server base URL from environment or use default
+    server_base = os.getenv("A2IA_BASE_URL", "https://a2ia.amazingland.live")
+
+    return {
+        "resource": f"{server_base}/mcp/",
+        "authorization_servers": [server_base]
+    }
+
+
+@app.get("/.well-known/oauth-authorization-server", tags=["OAuth"], include_in_schema=False)
+async def oauth_authorization_server():
+    """OAuth 2.0 Authorization Server Metadata (RFC 8414).
+
+    Describes available OAuth endpoints and capabilities.
+    """
+    server_base = os.getenv("A2IA_BASE_URL", "https://a2ia.amazingland.live")
+
+    return {
+        "issuer": server_base,
+        "authorization_endpoint": f"{server_base}/mcp/authorize",
+        "token_endpoint": f"{server_base}/mcp/token",
+        "registration_endpoint": f"{server_base}/mcp/register",
+        "scopes_supported": ["mcp"],
+        "response_types_supported": ["code"],
+        "grant_types_supported": ["authorization_code", "client_credentials"],
+        "code_challenge_methods_supported": ["S256"],  # Required by MCP spec
+        "token_endpoint_auth_methods_supported": ["client_secret_basic", "client_secret_post"],
+    }
+
+
+# ============================================================================
+# MCP OAuth Endpoints
+# ============================================================================
+
+class ClientRegistrationRequest(BaseModel):
+    """Dynamic Client Registration Request (RFC 7591)."""
+    client_name: str | None = None
+    redirect_uris: list[str] | None = None
+    grant_types: list[str] | None = Field(default=["authorization_code"])
+    response_types: list[str] | None = Field(default=["code"])
+    scope: str | None = None
+
+
+@app.post("/mcp/register", tags=["MCP OAuth"], include_in_schema=False)
+async def mcp_register_client(registration: ClientRegistrationRequest):
+    """Dynamic Client Registration (RFC 7591).
+
+    Stub implementation - generates client credentials for MCP clients.
+    """
+    import secrets
+
+    # Generate client credentials
+    client_id = f"a2ia_client_{secrets.token_hex(8)}"
+    client_secret = secrets.token_urlsafe(32)
+
+    logger.info(f"Registered MCP client: {client_id}")
+
+    return {
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "client_id_issued_at": int(subprocess.run(["date", "+%s"], capture_output=True, text=True).stdout.strip()),
+        "grant_types": registration.grant_types or ["authorization_code"],
+        "response_types": registration.response_types or ["code"],
+    }
+
+
+class TokenRequest(BaseModel):
+    """OAuth Token Request."""
+    grant_type: str
+    code: str | None = None
+    redirect_uri: str | None = None
+    client_id: str | None = None
+    client_secret: str | None = None
+    code_verifier: str | None = None
+
+
+@app.post("/mcp/token", tags=["MCP OAuth"], include_in_schema=False)
+async def mcp_token(token_request: TokenRequest):
+    """OAuth Token Endpoint (RFC 6749).
+
+    Stub implementation - issues access tokens for registered clients.
+    """
+    import secrets
+
+    # Generate access token
+    access_token = secrets.token_urlsafe(32)
+
+    logger.info(f"Issued token for client: {token_request.client_id}")
+
+    return {
+        "access_token": access_token,
+        "token_type": "Bearer",
+        "expires_in": 3600,
+        "scope": "mcp"
+    }
+
+
+@app.get("/mcp/authorize", tags=["MCP OAuth"], include_in_schema=False)
+async def mcp_authorize(
+    client_id: str,
+    redirect_uri: str,
+    response_type: str,
+    scope: str | None = None,
+    state: str | None = None,
+    code_challenge: str | None = None,
+    code_challenge_method: str | None = None
+):
+    """OAuth Authorization Endpoint (RFC 6749).
+
+    Stub implementation - auto-approves and redirects with auth code.
+    """
+    import secrets
+    from fastapi.responses import RedirectResponse
+
+    # Generate authorization code
+    auth_code = secrets.token_urlsafe(32)
+
+    logger.info(f"Authorization request from client: {client_id}")
+
+    # Build redirect URL with code
+    redirect_url = f"{redirect_uri}?code={auth_code}"
+    if state:
+        redirect_url += f"&state={state}"
+
+    return RedirectResponse(url=redirect_url)
+
+
+# ============================================================================
+# MCP Protocol Endpoints (Streamable HTTP Transport)
+# ============================================================================
+
+@app.head("/mcp/", tags=["MCP"], include_in_schema=False)
+async def mcp_head():
+    """MCP endpoint health check."""
+    return PlainTextResponse("", headers={
+        "MCP-Protocol-Version": "2025-06-18"
+    })
+
+
+@app.post("/mcp/", tags=["MCP"], include_in_schema=False)
+async def mcp_jsonrpc(request: Request):
+    """MCP JSON-RPC endpoint (Streamable HTTP transport).
+
+    Accepts JSON-RPC messages and returns responses.
+    Supports both single JSON responses and SSE streaming.
+    """
+    from fastapi.responses import StreamingResponse
+    import json
+
+    # Get the MCP app instance
+    from .core import get_mcp_app
+    mcp = get_mcp_app()
+
+    # Read JSON-RPC request
+    try:
+        jsonrpc_request = await request.json()
+    except Exception as e:
+        logger.error(f"Invalid JSON-RPC request: {e}")
+        raise HTTPException(status_code=400, detail="Invalid JSON-RPC request")
+
+    logger.info(f"MCP JSON-RPC request: {jsonrpc_request.get('method', 'unknown')}")
+
+    # Check Accept header
+    accept_header = request.headers.get("accept", "")
+    supports_sse = "text/event-stream" in accept_header
+
+    # For now, return a stub response
+    # TODO: Route to actual MCP app handler
+    response = {
+        "jsonrpc": "2.0",
+        "id": jsonrpc_request.get("id"),
+        "result": {
+            "message": "MCP endpoint stub - not yet fully implemented",
+            "request_method": jsonrpc_request.get("method")
+        }
+    }
+
+    if supports_sse:
+        # Return as SSE stream
+        async def sse_generator():
+            # Send the JSON-RPC response as SSE event
+            yield f"data: {json.dumps(response)}\n\n"
+
+        return StreamingResponse(
+            sse_generator(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "MCP-Protocol-Version": "2025-06-18"
+            }
+        )
+    else:
+        # Return as single JSON response
+        return JSONResponse(
+            content=response,
+            headers={
+                "MCP-Protocol-Version": "2025-06-18"
+            }
+        )
+
+
+@app.get("/mcp/", tags=["MCP"], include_in_schema=False)
+async def mcp_sse(request: Request):
+    """MCP SSE stream endpoint.
+
+    Opens a Server-Sent Events stream for server-initiated messages.
+    """
+    from fastapi.responses import StreamingResponse
+    import asyncio
+
+    logger.info("MCP SSE stream opened")
+
+    async def event_stream():
+        """Generate SSE events."""
+        try:
+            # Send initial connection message
+            yield f"data: {{'type': 'connected'}}\n\n"
+
+            # Keep connection alive
+            # TODO: Implement actual server-initiated message queue
+            while True:
+                await asyncio.sleep(30)  # Heartbeat every 30 seconds
+                yield ": heartbeat\n\n"
+        except asyncio.CancelledError:
+            logger.info("MCP SSE stream closed")
+            raise
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "MCP-Protocol-Version": "2025-06-18"
+        }
+    )

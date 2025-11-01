@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "a2ia": {
+      "command": "/home/aaron/dev/nevelis/a2ia/.venv/bin/python",
+      "args": [
+        "-m",
+        "a2ia.server",
+        "--mode",
+        "mcp"
+      ],
+      "env": {
+        "A2IA_WORKSPACE_PATH": "/home/aaron/dev/nevelis/a2ia/workspace"
+      }
+    }
+  }
+}
