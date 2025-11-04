@@ -1,0 +1,4 @@
+# Empty File Patch Test
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+This file was previously empty but now contains content.
