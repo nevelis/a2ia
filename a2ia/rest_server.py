@@ -721,6 +721,55 @@ async def tail_file(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+@app.get("/workspace/files/{path:path}/index", tags=["Files"], operation_id="IndexFile")
+async def index_file_endpoint(
+    path: str,
+    encoding: str = "utf-8",
+    authenticated: bool = Depends(verify_token)
+):
+    """Index a file and return structural information.
+    
+    Returns file size, line count, and symbols (functions, classes, etc.) with their
+    line numbers. Useful for exploring large files before reading specific sections.
+    
+    Supports Python, JavaScript, TypeScript, and Terraform files.
+    """
+    from .tools.filesystem_tools import index_file
+    try:
+        result = await index_file(path, encoding)
+        import json
+        return json.loads(result)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.get("/workspace/files/{path:path}/lines", tags=["Files"], operation_id="ReadFileLines")
+async def read_file_lines_endpoint(
+    path: str,
+    start_line: int = 1,
+    end_line: int = -1,
+    encoding: str = "utf-8",
+    authenticated: bool = Depends(verify_token)
+):
+    """Read specific lines from a file.
+    
+    Args:
+        path: File path
+        start_line: Starting line number (1-indexed, inclusive)
+        end_line: Ending line number (1-indexed, inclusive). Use -1 for end of file.
+        encoding: File encoding
+    
+    Returns:
+        Dictionary with lines, start_line, end_line, and total_lines
+    """
+    from .tools.filesystem_tools import read_file_lines
+    try:
+        result = await read_file_lines(path, start_line, end_line, encoding)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
 class GrepRequest(BaseModel):
     pattern: str = Field(description="Search pattern")
     path: str = Field(description="File or directory path")

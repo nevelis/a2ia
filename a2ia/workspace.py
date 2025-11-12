@@ -55,6 +55,49 @@ class Workspace:
         file_path = self.resolve_path(path)
         with open(file_path, "r", encoding=encoding) as f:
             return f.read()
+    
+    def read_file_lines(self, path: str, start_line: int = 1, end_line: int = -1, encoding: str = "utf-8") -> dict:
+        """Read specific lines from a file.
+        
+        Args:
+            path: File path
+            start_line: Starting line number (1-indexed, inclusive)
+            end_line: Ending line number (1-indexed, inclusive). Use -1 for end of file.
+            encoding: File encoding
+        
+        Returns:
+            Dictionary with lines, start_line, end_line, and total_lines
+        """
+        file_path = self.resolve_path(path)
+        with open(file_path, "r", encoding=encoding) as f:
+            all_lines = f.readlines()
+        
+        total_lines = len(all_lines)
+        
+        # Handle negative end_line (meaning "until end")
+        if end_line == -1:
+            end_line = total_lines
+        
+        # Validate line numbers
+        if start_line < 1:
+            start_line = 1
+        if end_line > total_lines:
+            end_line = total_lines
+        if start_line > end_line:
+            start_line = end_line
+        
+        # Extract lines (convert to 0-indexed for slicing)
+        selected_lines = all_lines[start_line - 1:end_line]
+        
+        return {
+            "success": True,
+            "path": str(path),
+            "lines": [line.rstrip('\n\r') for line in selected_lines],
+            "start_line": start_line,
+            "end_line": end_line,
+            "total_lines": total_lines,
+            "count": len(selected_lines)
+        }
 
     def write_file(self, path: str, content: str, encoding: str = "utf-8") -> None:
         file_path = self.resolve_path(path)

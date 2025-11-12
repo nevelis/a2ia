@@ -1,11 +1,13 @@
 """Filesystem operation tools with deterministic, streaming unified diff patching (final EOF alignment fix)."""
 
 from ..core import get_mcp_app, get_workspace
+from .indexer import index_file as index_file_impl
 import os
 import re
 import shutil
 import tempfile
 import time
+import json
 
 mcp = get_mcp_app()
 
@@ -232,6 +234,82 @@ async def read_file(path: str, encoding: str = "utf-8") -> dict:
     ws = get_workspace()
     content = ws.read_file(path, encoding)
     return {"content": content, "path": path, "size": len(content.encode(encoding))}
+
+
+@mcp.tool()
+async def read_file_lines(path: str, start_line: int = 1, end_line: int = -1, encoding: str = "utf-8") -> dict:
+    """Read specific lines from a file.
+    
+    Args:
+        path: File path
+        start_line: Starting line number (1-indexed, inclusive)
+        end_line: Ending line number (1-indexed, inclusive). Use -1 for end of file.
+        encoding: File encoding
+    
+    Returns:
+        Dictionary with lines, start_line, end_line, and total_lines
+    """
+    ws = get_workspace()
+    return ws.read_file_lines(path, start_line, end_line, encoding)
+
+
+@mcp.tool()
+async def index_file(path: str, encoding: str = "utf-8") -> str:
+    """Index a file and return structural information without loading full content.
+    
+    Returns file size, line count, and symbols (functions, classes, etc.) with their
+    line numbers. Useful for exploring large files before reading specific sections.
+    
+    Supports Python, JavaScript, TypeScript, and Terraform files.
+    
+    Args:
+        path: File path to index
+        encoding: File encoding (default: utf-8)
+    
+    Returns:
+        JSON string with file metadata and symbol index
+    """
+    ws = get_workspace()
+    file_path = ws.resolve_path(path)
+    
+    try:
+        # Read file content
+        with open(file_path, 'r', encoding=encoding) as f:
+            content = f.read()
+        
+        # Index the file
+        index = index_file_impl(str(file_path), content, encoding)
+        
+        # Convert to dict for JSON serialization
+        result = {
+            "success": True,
+            "path": path,
+            "size_bytes": index.size_bytes,
+            "total_lines": index.total_lines,
+            "language": index.language,
+            "encoding": index.encoding,
+            "symbols": [
+                {
+                    "name": s.name,
+                    "type": s.type,
+                    "start_line": s.start_line,
+                    "end_line": s.end_line,
+                    "parent": s.parent,
+                    "signature": s.signature
+                }
+                for s in index.symbols
+            ]
+        }
+        
+        return json.dumps(result, indent=2)
+    
+    except Exception as e:
+        error_result = {
+            "success": False,
+            "path": path,
+            "error": str(e)
+        }
+        return json.dumps(error_result, indent=2)
 
 
 @mcp.tool()
